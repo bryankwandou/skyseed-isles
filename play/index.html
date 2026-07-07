@@ -90,7 +90,11 @@
 <button class="tbtn" id="jumpBtn" aria-label="Jump">JUMP</button>
 <button class="tbtn" id="punchBtn" aria-label="Punch" style="right:120px; bottom:44px;">POW</button>
 <script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js" } }
+{ "imports": {
+  "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/",
+  "@pixiv/three-vrm": "https://unpkg.com/@pixiv/three-vrm@2.1.3/lib/three-vrm.module.js"
+} }
 </script>
 <script type="module" src="./game.js"></script>
 </body>
