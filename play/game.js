@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
 // ---------- basics ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -175,6 +177,37 @@ crown.rotation.x = Math.PI / 2.4; crown.position.y = 2.38; body.add(crown);
 
 player.position.set(0, 0, 3);
 scene.add(player);
+
+// ---------- VRM anime avatar (replaces the primitive Miru once loaded) ----------
+let vrm = null, vrmBones = null;
+{
+  const loader = new GLTFLoader();
+  loader.register(parser => new VRMLoaderPlugin(parser));
+  loader.load('assets/miru.vrm', gltf => {
+    const v = gltf.userData.vrm;
+    if (!v) return;
+    VRMUtils.removeUnnecessaryVertices(gltf.scene);
+    VRMUtils.removeUnnecessaryJoints(gltf.scene);
+    VRMUtils.rotateVRM0(v);
+    v.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    body.clear();
+    body.add(v.scene);
+    v.scene.scale.setScalar(1.55);
+    vrm = v;
+    const h = v.humanoid;
+    vrmBones = {
+      lArm: h.getNormalizedBoneNode('leftUpperArm'),
+      rArm: h.getNormalizedBoneNode('rightUpperArm'),
+      lLeg: h.getNormalizedBoneNode('leftUpperLeg'),
+      rLeg: h.getNormalizedBoneNode('rightUpperLeg'),
+      spine: h.getNormalizedBoneNode('spine'),
+      neck: h.getNormalizedBoneNode('neck')
+    };
+    if (vrmBones.lArm) vrmBones.lArm.rotation.z = 1.15;
+    if (vrmBones.rArm) vrmBones.rArm.rotation.z = -1.15;
+    say('Miru has arrived!');
+  }, undefined, err => console.warn('VRM load failed, keeping placeholder', err));
+}
 
 // ---------- slimes (boppable, harmless) ----------
 const slimes = [];
@@ -503,23 +536,52 @@ function animate() {
       chime(330);
     }
 
-    // punch animation: right arm windmill over 0.3s
-    if (punchTime >= 0) {
-      punchTime += dt;
-      const p = Math.min(1, punchTime / 0.3);
-      arms[1].rotation.x = -Math.sin(p * Math.PI) * 2.2;
-      body.position.z = Math.sin(p * Math.PI) * 0.15;
-      if (p >= 1) { punchTime = -1; arms[1].rotation.x = 0; body.position.z = 0; }
-    } else if (running && onGround) {
-      const s = Math.sin(t * 14);
-      arms[0].rotation.x = s * 0.9; arms[1].rotation.x = -s * 0.9;
-      body.position.y = Math.abs(Math.sin(t * 14)) * 0.12;
-      dress.rotation.y = s * 0.08;
+    // character animation — VRM humanoid bones when loaded, primitive rig otherwise
+    if (vrm && vrmBones) {
+      const B = vrmBones;
+      if (punchTime >= 0) {
+        punchTime += dt;
+        const p = Math.min(1, punchTime / 0.3);
+        if (B.rArm) { B.rArm.rotation.z = -1.15; B.rArm.rotation.x = -Math.sin(p * Math.PI) * 2.0; }
+        body.position.z = Math.sin(p * Math.PI) * 0.15;
+        if (p >= 1) { punchTime = -1; if (B.rArm) B.rArm.rotation.x = 0; body.position.z = 0; }
+      } else if (running && onGround) {
+        const s = Math.sin(t * 14);
+        if (B.lArm) { B.lArm.rotation.z = 1.15; B.lArm.rotation.x = s * 0.7; }
+        if (B.rArm) { B.rArm.rotation.z = -1.15; B.rArm.rotation.x = -s * 0.7; }
+        if (B.lLeg) B.lLeg.rotation.x = -s * 0.75;
+        if (B.rLeg) B.rLeg.rotation.x = s * 0.75;
+        if (B.spine) B.spine.rotation.x = 0.12;
+        body.position.y = Math.abs(s) * 0.08;
+      } else {
+        if (B.lArm) B.lArm.rotation.x *= 0.85;
+        if (B.rArm) B.rArm.rotation.x *= 0.85;
+        if (B.lLeg) B.lLeg.rotation.x *= 0.85;
+        if (B.rLeg) B.rLeg.rotation.x *= 0.85;
+        if (B.spine) B.spine.rotation.x = Math.sin(t * 2.4) * 0.03;
+        if (B.neck) B.neck.rotation.x = Math.sin(t * 1.7) * 0.04;
+        body.position.y = Math.sin(t * 2.4) * 0.04 + (onGround ? 0 : -0.05);
+      }
+      vrm.update(dt);
     } else {
-      arms[0].rotation.x *= 0.85; arms[1].rotation.x *= 0.85;
-      body.position.y = Math.sin(t * 2.4) * 0.05 + 0.02;
+      // punch animation: right arm windmill over 0.3s
+      if (punchTime >= 0) {
+        punchTime += dt;
+        const p = Math.min(1, punchTime / 0.3);
+        arms[1].rotation.x = -Math.sin(p * Math.PI) * 2.2;
+        body.position.z = Math.sin(p * Math.PI) * 0.15;
+        if (p >= 1) { punchTime = -1; arms[1].rotation.x = 0; body.position.z = 0; }
+      } else if (running && onGround) {
+        const s = Math.sin(t * 14);
+        arms[0].rotation.x = s * 0.9; arms[1].rotation.x = -s * 0.9;
+        body.position.y = Math.abs(Math.sin(t * 14)) * 0.12;
+        dress.rotation.y = s * 0.08;
+      } else {
+        arms[0].rotation.x *= 0.85; arms[1].rotation.x *= 0.85;
+        body.position.y = Math.sin(t * 2.4) * 0.05 + 0.02;
+      }
+      tails.forEach((tail, i) => { tail.rotation.x = Math.sin(t * 3 + i) * 0.18 - (onGround ? 0 : 0.5); });
     }
-    tails.forEach((tail, i) => { tail.rotation.x = Math.sin(t * 3 + i) * 0.18 - (onGround ? 0 : 0.5); });
 
     // collectibles
     for (const c of collect) {
