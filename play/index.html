@@ -76,17 +76,19 @@
   <h1>SKYSEED ISLES</h1>
   <p>Miru the sky gardener lost her glowing seeds across the floating islands. Run, hop and glide to bring them all home.</p>
   <button id="startBtn">Start Adventure</button>
-  <p style="font-size:13px">Move: WASD / Arrow keys &nbsp;·&nbsp; Jump: Space (press again in the air to double jump)</p>
+  <p style="font-size:13px">WASD to run · mouse to look around · Space to jump (twice for double jump) · F to bop slimes</p>
 </div>
 <div id="hud">
   Seeds <b id="cSeed">0</b>/<b id="tSeed">0</b><br>
   Sky Rings <b id="cRing">0</b>/<b id="tRing">0</b><br>
-  Stars <b id="cStar">0</b>/<b id="tStar">0</b>
+  Stars <b id="cStar">0</b>/<b id="tStar">0</b><br>
+  Slimes bopped <b id="cBop">0</b>
 </div>
 <div id="msg"></div>
-<div id="help">WASD / arrows to run · Space to jump · double jump in the air</div>
+<div id="help">Click world to grab camera · mouse to look · WASD run · Shift sprint · Space jump ×2 · F or click to punch · scroll to zoom</div>
 <div id="stick"><div id="knob"></div></div>
 <button class="tbtn" id="jumpBtn" aria-label="Jump">JUMP</button>
+<button class="tbtn" id="punchBtn" aria-label="Punch" style="right:120px; bottom:44px;">POW</button>
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js" } }
 </script>
