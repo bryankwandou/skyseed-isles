@@ -46,7 +46,6 @@ function makeIsland(x, y, z, r) {
   rock.rotation.x = Math.PI;
   rock.position.y = -1.2 - r * 0.8;
   g.add(rock);
-  // grass tufts
   const tuft = new THREE.ConeGeometry(0.16, 0.55, 5);
   const n = Math.floor(r * r * 0.9);
   const inst = new THREE.InstancedMesh(tuft, new THREE.MeshToonMaterial({ color: 0x8fe06a }), n);
@@ -104,7 +103,6 @@ makeTree(islands[3], 0, 2); makeTree(islands[4], 1, -1);
 makeTree(islands[6], -2, 2); makePillar(islands[2], 0, 0, 3);
 makePillar(islands[9], 0, 0, 2.5);
 
-// waterfalls (soft glowing columns off island edges)
 const fallMat = new THREE.MeshBasicMaterial({ color: 0xcdefff, transparent: true, opacity: 0.45 });
 [[islands[1], 5.4, 0], [islands[4], -5.4, 1], [islands[6], 0, 5.4]].forEach(([isl, ox, oz]) => {
   const f = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.1, 14, 10, 1, true), fallMat);
@@ -112,7 +110,6 @@ const fallMat = new THREE.MeshBasicMaterial({ color: 0xcdefff, transparent: true
   scene.add(f);
 });
 
-// clouds
 const cloudMat = new THREE.MeshToonMaterial({ color: 0xffffff });
 const clouds = [];
 for (let i = 0; i < 14; i++) {
@@ -127,7 +124,7 @@ for (let i = 0; i < 14; i++) {
   scene.add(c); clouds.push(c);
 }
 
-// ---------- character: Miru, the sky gardener ----------
+// ---------- character: Miru ----------
 const skin = new THREE.MeshToonMaterial({ color: 0xffe3cf });
 const hairM = new THREE.MeshToonMaterial({ color: 0xb9a3ff });
 const dressM = new THREE.MeshToonMaterial({ color: 0xffffff });
@@ -145,7 +142,6 @@ const chest = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), dressTrim);
 chest.position.y = 1.28; chest.castShadow = true; body.add(chest);
 const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 14), skin);
 head.position.y = 1.95; head.castShadow = true; body.add(head);
-// hair: back volume + bangs + two long twin-tails
 const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 12), hairM);
 hairBack.position.set(0, 2.02, -0.08); hairBack.scale.set(1, 1, 0.95); body.add(hairBack);
 const bangs = new THREE.Mesh(new THREE.SphereGeometry(0.44, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2.4), hairM);
@@ -157,27 +153,55 @@ const tails = [];
   tl.rotation.z = 0.35 * s;
   body.add(tl); tails.push(tl);
 });
-// eyes
 [-1, 1].forEach(s => {
   const e = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8),
     new THREE.MeshBasicMaterial({ color: 0x2a2f45 }));
   e.position.set(0.16 * s, 1.98, 0.37); body.add(e);
 });
-// arms
 const arms = [];
 [-1, 1].forEach(s => {
+  const pivot = new THREE.Group();
+  pivot.position.set(0.4 * s, 1.35, 0);
   const a = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.5, 4, 8), skin);
-  a.position.set(0.4 * s, 1.15, 0);
-  a.rotation.z = 0.5 * s;
-  a.castShadow = true; body.add(a); arms.push(a);
+  a.position.y = -0.28;
+  a.castShadow = true;
+  pivot.add(a);
+  pivot.rotation.z = 0.35 * s;
+  body.add(pivot); arms.push(pivot);
 });
-// flower crown accent
 const crown = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.05, 6, 16),
   new THREE.MeshToonMaterial({ color: 0xffc2dd }));
 crown.rotation.x = Math.PI / 2.4; crown.position.y = 2.38; body.add(crown);
 
 player.position.set(0, 0, 3);
 scene.add(player);
+
+// ---------- slimes (boppable, harmless) ----------
+const slimes = [];
+const slimeColors = [0x7fe8c9, 0xffd98a, 0xff9ec6, 0xa0c8ff];
+function makeSlime(isl, ox, oz) {
+  const g = new THREE.Group();
+  const col = slimeColors[slimes.length % slimeColors.length];
+  const blob = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12),
+    new THREE.MeshToonMaterial({ color: col }));
+  blob.scale.y = 0.8; blob.castShadow = true; g.add(blob);
+  [-1, 1].forEach(s => {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x2a2f45 }));
+    e.position.set(0.18 * s, 0.18, 0.45); g.add(e);
+  });
+  g.position.set(isl.x + ox, isl.y + 0.45, isl.z + oz);
+  scene.add(g);
+  slimes.push({
+    g, blob, isl, alive: true, respawn: 0,
+    home: new THREE.Vector3(isl.x + ox, isl.y + 0.45, isl.z + oz),
+    dir: Math.random() * Math.PI * 2, turn: 0, phase: Math.random() * 6
+  });
+}
+makeSlime(islands[0], 4, -2); makeSlime(islands[0], -3, -5);
+makeSlime(islands[1], 1, 1); makeSlime(islands[3], -1, 0);
+makeSlime(islands[4], 2, 2); makeSlime(islands[6], 0, -2);
+makeSlime(islands[7], 1, 1); makeSlime(islands[5], 0, 0);
 
 // ---------- collectibles ----------
 const $ = id => document.getElementById(id);
@@ -189,8 +213,7 @@ const ringMat = new THREE.MeshBasicMaterial({ color: 0x8af0d8 });
 function addSeed(x, y, z) {
   const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.32), seedMat);
   s.position.set(x, y + 1, z);
-  const glow = new THREE.PointLight(0xffe98a, 0.6, 4);
-  s.add(glow);
+  s.add(new THREE.PointLight(0xffe98a, 0.6, 4));
   scene.add(s);
   collect.push({ mesh: s, kind: 'seed', r: 1.1 });
 }
@@ -222,6 +245,7 @@ addRing(-2, 3, -21); addRing(31, 7.5, -14);
 const totals = { seed: 0, star: 0, ring: 0 };
 collect.forEach(c => totals[c.kind]++);
 const got = { seed: 0, star: 0, ring: 0 };
+let bops = 0;
 $('tSeed').textContent = totals.seed;
 $('tStar').textContent = totals.star;
 $('tRing').textContent = totals.ring;
@@ -234,12 +258,11 @@ function say(text) {
   msgTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
-// sparkle burst on pickup
 const bursts = [];
-function burst(pos, color) {
+function burst(pos, color, count = 20) {
   const geo = new THREE.BufferGeometry();
-  const n = 20, arr = new Float32Array(n * 3), velArr = [];
-  for (let i = 0; i < n; i++) {
+  const arr = new Float32Array(count * 3), velArr = [];
+  for (let i = 0; i < count; i++) {
     arr.set([pos.x, pos.y, pos.z], i * 3);
     velArr.push(new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 6, (Math.random() - 0.5) * 6));
   }
@@ -249,7 +272,6 @@ function burst(pos, color) {
   bursts.push({ pts, vel: velArr, life: 0.8 });
 }
 
-// soft chime via WebAudio
 let ac;
 function chime(freq) {
   try {
@@ -265,10 +287,59 @@ function chime(freq) {
 
 // ---------- input ----------
 const keys = {};
-addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') jumpPressed = true; });
+let jumpPressed = false, punchPressed = false;
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') { jumpPressed = true; e.preventDefault(); }
+  if (e.code === 'KeyF' || e.code === 'KeyE') punchPressed = true;
+});
 addEventListener('keyup', e => { keys[e.code] = false; });
 
-let jumpPressed = false;
+// --- free-look camera state ---
+let camYaw = 0, camPitch = 0.32, camDist = 9;
+const isTouch = matchMedia('(pointer:coarse)').matches;
+
+// desktop: pointer lock mouse-look; click while locked = punch
+renderer.domElement.addEventListener('click', () => {
+  if (!started) return;
+  if (document.pointerLockElement !== renderer.domElement) {
+    renderer.domElement.requestPointerLock();
+  } else {
+    punchPressed = true;
+  }
+});
+addEventListener('mousemove', e => {
+  if (document.pointerLockElement !== renderer.domElement) return;
+  camYaw -= e.movementX * 0.0028;
+  camPitch = Math.min(1.15, Math.max(-0.35, camPitch + e.movementY * 0.0022));
+});
+addEventListener('wheel', e => {
+  camDist = Math.min(16, Math.max(5, camDist + e.deltaY * 0.008));
+});
+
+// touch: drag anywhere on the right side of the canvas rotates the camera
+let camTouch = null, lastTX = 0, lastTY = 0;
+renderer.domElement.addEventListener('touchstart', e => {
+  for (const t of e.changedTouches) {
+    if (t.clientX > innerWidth * 0.45 && camTouch === null) {
+      camTouch = t.identifier; lastTX = t.clientX; lastTY = t.clientY;
+    }
+  }
+}, { passive: true });
+renderer.domElement.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier !== camTouch) continue;
+    camYaw -= (t.clientX - lastTX) * 0.006;
+    camPitch = Math.min(1.15, Math.max(-0.35, camPitch + (t.clientY - lastTY) * 0.004));
+    lastTX = t.clientX; lastTY = t.clientY;
+  }
+}, { passive: true });
+const endCamTouch = e => {
+  for (const t of e.changedTouches) if (t.identifier === camTouch) camTouch = null;
+};
+renderer.domElement.addEventListener('touchend', endCamTouch);
+renderer.domElement.addEventListener('touchcancel', endCamTouch);
+
 const stickVec = { x: 0, y: 0 };
 const stickEl = $('stick'), knob = $('knob');
 if (stickEl) {
@@ -289,12 +360,18 @@ if (stickEl) {
 }
 $('jumpBtn').addEventListener('touchstart', e => { e.preventDefault(); jumpPressed = true; });
 $('jumpBtn').addEventListener('click', () => { jumpPressed = true; });
+const punchBtn = $('punchBtn');
+if (punchBtn) {
+  punchBtn.addEventListener('touchstart', e => { e.preventDefault(); punchPressed = true; });
+  punchBtn.addEventListener('click', () => { punchPressed = true; });
+}
 
 // ---------- physics + loop ----------
 const vel = new THREE.Vector3();
 let onGround = false, jumps = 0, running = false;
+let punchTime = -1; // >=0 while punch anim plays
 const spawn = new THREE.Vector3(0, 0, 3);
-const SPEED = 7, JUMP = 9.5, GRAV = -22;
+const WALK = 7, SPRINT = 11, JUMP = 9.5, GRAV = -22;
 
 function groundHeight(x, z) {
   let best = -Infinity;
@@ -312,11 +389,30 @@ $('startBtn').addEventListener('click', () => {
   t.style.opacity = '0';
   setTimeout(() => t.remove(), 650);
   chime(660);
-  say('Find the glowing seeds!');
+  say(isTouch ? 'Drag the right side to look around!' : 'Click the world to grab the camera!');
 });
 
 const clock = new THREE.Clock();
-const camTarget = new THREE.Vector3();
+
+function doPunch(t) {
+  punchTime = 0;
+  chime(240);
+  // hit any slime in front of Miru within reach
+  const fwd = new THREE.Vector3(Math.sin(body.rotation.y), 0, Math.cos(body.rotation.y));
+  for (const s of slimes) {
+    if (!s.alive) continue;
+    const to = s.g.position.clone().sub(player.position); to.y = 0;
+    if (to.length() < 2.4 && to.normalize().dot(fwd) > 0.35) {
+      s.alive = false; s.respawn = t + 6;
+      burst(s.g.position, s.blob.material.color, 28);
+      s.g.visible = false;
+      bops++;
+      const bopEl = $('cBop'); if (bopEl) bopEl.textContent = bops;
+      chime(1040);
+      say(['Boing! Got one!', 'Slime bopped!', 'Pow! It giggled away.'][bops % 3]);
+    }
+  }
+}
 
 function animate() {
   requestAnimationFrame(animate);
@@ -328,20 +424,46 @@ function animate() {
     if (c.position.x > 90) c.position.x = -90;
   }
 
+  // slimes hop and wander
+  for (const s of slimes) {
+    if (!s.alive) {
+      if (t > s.respawn) {
+        s.alive = true; s.g.visible = true;
+        s.g.position.copy(s.home);
+        burst(s.g.position, s.blob.material.color, 12);
+      }
+      continue;
+    }
+    s.turn -= dt;
+    if (s.turn <= 0) { s.dir += (Math.random() - 0.5) * 2; s.turn = 1.5 + Math.random() * 2; }
+    const hop = Math.abs(Math.sin(t * 3 + s.phase));
+    s.blob.scale.set(1 + (1 - hop) * 0.15, 0.8 - (1 - hop) * 0.2, 1 + (1 - hop) * 0.15);
+    s.g.position.y = s.isl.y + 0.45 + hop * 0.5;
+    const nx = s.g.position.x + Math.sin(s.dir) * dt * 1.2;
+    const nz = s.g.position.z + Math.cos(s.dir) * dt * 1.2;
+    if (Math.hypot(nx - s.isl.x, nz - s.isl.z) < s.isl.r - 0.8) {
+      s.g.position.x = nx; s.g.position.z = nz;
+    } else { s.dir += Math.PI / 2; }
+    s.g.rotation.y = s.dir;
+  }
+
+  // keyboard camera rotate fallback (Q/E) for kids without a mouse
+  if (keys.KeyQ) camYaw += dt * 2.2;
+  if (keys.KeyE && !punchPressed) { /* E reserved for punch; Q rotates */ }
+
   if (started) {
-    // camera-relative input direction
+    // camera-relative movement using free-look yaw
     let ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + stickVec.x;
     let iz = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0) + stickVec.y;
     const len = Math.hypot(ix, iz);
     if (len > 1) { ix /= len; iz /= len; }
     running = len > 0.05;
 
-    const camAngle = Math.atan2(camera.position.x - player.position.x, camera.position.z - player.position.z);
-    const dirX = ix * Math.cos(camAngle) + iz * Math.sin(camAngle);
-    const dirZ = -ix * Math.sin(camAngle) + iz * Math.cos(camAngle);
+    const speed = (keys.ShiftLeft || keys.ShiftRight) ? SPRINT : WALK;
+    const sy = Math.sin(camYaw), cy = Math.cos(camYaw);
+    vel.x = (ix * cy - iz * sy) * speed;
+    vel.z = (-ix * sy - iz * cy) * speed;
 
-    vel.x = dirX * SPEED;
-    vel.z = dirZ * SPEED;
     if (running) {
       const target = Math.atan2(vel.x, vel.z);
       let d = target - body.rotation.y;
@@ -356,8 +478,10 @@ function animate() {
     }
     jumpPressed = false;
 
+    if (punchPressed && punchTime < 0) doPunch(t);
+    punchPressed = false;
+
     vel.y += GRAV * dt;
-    // gentle glide while falling and holding jump
     if (vel.y < 0 && keys.Space) vel.y = Math.max(vel.y, -3.5);
 
     player.position.x += vel.x * dt;
@@ -372,7 +496,6 @@ function animate() {
       onGround = false;
     }
 
-    // fell off the world — soft respawn, no fail state
     if (player.position.y < -25) {
       player.position.copy(spawn).add(new THREE.Vector3(0, 6, 0));
       vel.set(0, 0, 0);
@@ -380,8 +503,14 @@ function animate() {
       chime(330);
     }
 
-    // run/idle animation
-    if (running && onGround) {
+    // punch animation: right arm windmill over 0.3s
+    if (punchTime >= 0) {
+      punchTime += dt;
+      const p = Math.min(1, punchTime / 0.3);
+      arms[1].rotation.x = -Math.sin(p * Math.PI) * 2.2;
+      body.position.z = Math.sin(p * Math.PI) * 0.15;
+      if (p >= 1) { punchTime = -1; arms[1].rotation.x = 0; body.position.z = 0; }
+    } else if (running && onGround) {
       const s = Math.sin(t * 14);
       arms[0].rotation.x = s * 0.9; arms[1].rotation.x = -s * 0.9;
       body.position.y = Math.abs(Math.sin(t * 14)) * 0.12;
@@ -428,10 +557,17 @@ function animate() {
     if (b.life <= 0) { scene.remove(b.pts); bursts.splice(i, 1); }
   }
 
-  // camera: orbit on title screen, smooth follow in game
+  // orbit camera around player using yaw/pitch/distance
   if (started) {
-    camTarget.set(player.position.x, player.position.y + 4.5, player.position.z + 9);
-    camera.position.lerp(camTarget, 0.06);
+    const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
+    const ox = Math.sin(camYaw) * cp * camDist;
+    const oz = Math.cos(camYaw) * cp * camDist;
+    const target = new THREE.Vector3(
+      player.position.x + ox,
+      player.position.y + 1.6 + sp * camDist,
+      player.position.z + oz
+    );
+    camera.position.lerp(target, 0.35);
   } else {
     camera.position.set(Math.sin(t * 0.15) * 22, 10, Math.cos(t * 0.15) * 22);
   }
