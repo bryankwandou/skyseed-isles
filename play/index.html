@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Skyseed Isles — Play</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>" />
 <style>
   :root { --ink:#1d2433; --panel:rgba(255,255,255,.82); }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -74,14 +75,13 @@
 <body>
 <div id="title">
   <h1>SKYSEED ISLES</h1>
-  <p>Miru the sky gardener lost her glowing seeds across the floating islands. Run, hop and glide to bring them all home.</p>
+  <p>Miru the sky gardener drifts across islands that never run out. Gather sparks, unlock new moves, and wander into snow, sunset and starlit lands that keep appearing the further you roam.</p>
   <button id="startBtn">Start Adventure</button>
-  <p style="font-size:13px">WASD to run · mouse to look around · Space to jump (twice for double jump) · F to bop slimes</p>
+  <p style="font-size:13px">WASD to run · mouse to look around · Space to jump · F to bop slimes · your sparks and unlocks are saved</p>
 </div>
 <div id="hud">
-  Seeds <b id="cSeed">0</b>/<b id="tSeed">0</b><br>
-  Sky Rings <b id="cRing">0</b>/<b id="tRing">0</b><br>
-  Stars <b id="cStar">0</b>/<b id="tStar">0</b><br>
+  Sparks <b id="cSpark">0</b><br>
+  Next: <b id="nextGoal">—</b> in <b id="nextIn">—</b><br>
   Slimes bopped <b id="cBop">0</b>
 </div>
 <div id="msg"></div>
