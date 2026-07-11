@@ -33,84 +33,76 @@ addEventListener('resize', () => {
 });
 
 // ---------- islands ----------
-const islands = []; // { x, z, y (top), r }
-const grassMat = new THREE.MeshToonMaterial({ color: 0x6fce4e });
-const dirtMat = new THREE.MeshToonMaterial({ color: 0x9a6b4f });
-const stoneMat = new THREE.MeshToonMaterial({ color: 0xb9c4cf });
+const islands = []; // live island objects near the player
 
-function makeIsland(x, y, z, r) {
+// Biomes ring outward from the origin, so every stretch of exploring shows a
+// visibly new kind of land — the core "endless discovery" hook.
+const BIOMES = [
+  { name: 'Meadow Isles',  grass: 0x6fce4e, tuft: 0x8fe06a, dirt: 0x9a6b4f, leaf: 0xff9ec6, sky: 0x8fd0f5, fog: 0xa8ddf8 },
+  { name: 'Sunset Grove',  grass: 0xe0a24e, tuft: 0xf3c06a, dirt: 0x8a5540, leaf: 0xff8f6a, sky: 0xf6c98f, fog: 0xf8dcc0 },
+  { name: 'Snow Isles',    grass: 0xdfeaf2, tuft: 0xffffff, dirt: 0x8fa6b9, leaf: 0xbfe0ff, sky: 0xcfe8ff, fog: 0xe6f4ff },
+  { name: 'Starfall Isles',grass: 0x454a7a, tuft: 0x7f88e0, dirt: 0x2a2f45, leaf: 0x9ad0ff, sky: 0x2e3360, fog: 0x3a4070 },
+  { name: 'Candy Reef',    grass: 0xff9ec6, tuft: 0xffc2dd, dirt: 0xc06a9a, leaf: 0xa06bf0, sky: 0xffd6ef, fog: 0xffe0f2 },
+];
+function biomeFor(x, z) { return BIOMES[Math.floor(Math.hypot(x, z) / 130) % BIOMES.length]; }
+
+function makeIsland(x, y, z, r, biome, rand) {
   const g = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 1.2, 24), grassMat);
-  top.position.y = -0.6;
-  top.receiveShadow = true;
-  g.add(top);
-  const rock = new THREE.Mesh(new THREE.ConeGeometry(r * 0.92, r * 1.6, 10), dirtMat);
-  rock.rotation.x = Math.PI;
-  rock.position.y = -1.2 - r * 0.8;
-  g.add(rock);
-  const tuft = new THREE.ConeGeometry(0.16, 0.55, 5);
-  const n = Math.floor(r * r * 0.9);
-  const inst = new THREE.InstancedMesh(tuft, new THREE.MeshToonMaterial({ color: 0x8fe06a }), n);
+  const grassMat = new THREE.MeshToonMaterial({ color: biome.grass });
+  const dirtMat = new THREE.MeshToonMaterial({ color: biome.dirt });
+  const tuftMat = new THREE.MeshToonMaterial({ color: biome.tuft });
+  const topGeo = new THREE.CylinderGeometry(r, r * 0.92, 1.2, 24);
+  const top = new THREE.Mesh(topGeo, grassMat);
+  top.position.y = -0.6; top.receiveShadow = true; g.add(top);
+  const rockGeo = new THREE.ConeGeometry(r * 0.92, r * 1.6, 10);
+  const rock = new THREE.Mesh(rockGeo, dirtMat);
+  rock.rotation.x = Math.PI; rock.position.y = -1.2 - r * 0.8; g.add(rock);
+  const tuftGeo = new THREE.ConeGeometry(0.16, 0.55, 5);
+  const n = Math.floor(r * r * 0.7);
+  const inst = new THREE.InstancedMesh(tuftGeo, tuftMat, n);
   const m = new THREE.Matrix4();
   for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * (r - 0.6);
-    m.makeRotationY(Math.random() * Math.PI);
+    const a = rand() * Math.PI * 2, d = Math.sqrt(rand()) * (r - 0.6);
+    m.makeRotationY(rand() * Math.PI);
     m.setPosition(Math.cos(a) * d, 0.25, Math.sin(a) * d);
     inst.setMatrixAt(i, m);
   }
   g.add(inst);
   g.position.set(x, y, z);
   scene.add(g);
-  islands.push({ x, z, y, r });
-  return g;
+  const isl = { x, z, y, r, group: g, biome, collect: [], slimes: [] };
+  islands.push(isl);
+  return isl;
 }
 
-function makePillar(island, ox, oz, h) {
-  const p = new THREE.Mesh(new THREE.BoxGeometry(1.4, h, 1.4), stoneMat);
-  p.position.set(island.x + ox, island.y + h / 2, island.z + oz);
-  p.castShadow = true; p.receiveShadow = true;
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.5, 1.9), stoneMat);
-  cap.position.set(island.x + ox, island.y + h + 0.25, island.z + oz);
-  cap.castShadow = true;
-  scene.add(p, cap);
+// decorations are children of the island group (local coords) so despawning
+// an island is a single scene.remove + dispose walk.
+function makePillar(isl, ox, oz, h) {
+  const mat = new THREE.MeshToonMaterial({ color: 0xb9c4cf });
+  const p = new THREE.Mesh(new THREE.BoxGeometry(1.4, h, 1.4), mat);
+  p.position.set(ox, h / 2, oz); p.castShadow = true; p.receiveShadow = true;
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.5, 1.9), mat);
+  cap.position.set(ox, h + 0.25, oz); cap.castShadow = true;
+  isl.group.add(p, cap);
 }
 
-function makeTree(island, ox, oz) {
+function makeTree(isl, ox, oz) {
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 8),
     new THREE.MeshToonMaterial({ color: 0x8a5a3b }));
-  trunk.position.set(island.x + ox, island.y + 1.1, island.z + oz);
-  trunk.castShadow = true;
+  trunk.position.set(ox, 1.1, oz); trunk.castShadow = true;
   const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 0),
-    new THREE.MeshToonMaterial({ color: 0xff9ec6 }));
-  leaf.position.set(island.x + ox, island.y + 3.1, island.z + oz);
-  leaf.castShadow = true;
-  scene.add(trunk, leaf);
+    new THREE.MeshToonMaterial({ color: isl.biome.leaf }));
+  leaf.position.set(ox, 3.1, oz); leaf.castShadow = true;
+  isl.group.add(trunk, leaf);
 }
 
-makeIsland(0, 0, 0, 10);
-makeIsland(18, 2, -8, 6);
-makeIsland(30, 4.5, 4, 5);
-makeIsland(14, 1, 14, 5.5);
-makeIsland(-16, 2.5, 10, 6);
-makeIsland(-26, 5, -4, 5);
-makeIsland(-10, 1.5, -18, 6);
-makeIsland(6, 3.5, -24, 5);
-makeIsland(24, 6.5, -20, 4.5);
-makeIsland(38, 8, -8, 4);
-
-makePillar(islands[0], -6, -4, 4); makePillar(islands[0], 6, -4, 4);
-makePillar(islands[0], 0, -7, 6);
-makeTree(islands[0], 5, 5); makeTree(islands[0], -5, 5);
-makeTree(islands[3], 0, 2); makeTree(islands[4], 1, -1);
-makeTree(islands[6], -2, 2); makePillar(islands[2], 0, 0, 3);
-makePillar(islands[9], 0, 0, 2.5);
-
+// waterfall ribbon under a group child (local coords)
 const fallMat = new THREE.MeshBasicMaterial({ color: 0xcdefff, transparent: true, opacity: 0.45 });
-[[islands[1], 5.4, 0], [islands[4], -5.4, 1], [islands[6], 0, 5.4]].forEach(([isl, ox, oz]) => {
+function makeFall(isl, ox, oz) {
   const f = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.1, 14, 10, 1, true), fallMat);
-  f.position.set(isl.x + ox, isl.y - 7, isl.z + oz);
-  scene.add(f);
-});
+  f.position.set(ox, -7, oz);
+  isl.group.add(f);
+}
 
 const cloudMat = new THREE.MeshToonMaterial({ color: 0xffffff });
 const clouds = [];
@@ -212,9 +204,9 @@ let vrm = null, vrmBones = null;
 // ---------- slimes (boppable, harmless) ----------
 const slimes = [];
 const slimeColors = [0x7fe8c9, 0xffd98a, 0xff9ec6, 0xa0c8ff];
-function makeSlime(isl, ox, oz) {
+function makeSlime(isl, ox, oz, rand) {
   const g = new THREE.Group();
-  const col = slimeColors[slimes.length % slimeColors.length];
+  const col = slimeColors[Math.floor((rand ? rand() : Math.random()) * slimeColors.length)];
   const blob = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12),
     new THREE.MeshToonMaterial({ color: col }));
   blob.scale.y = 0.8; blob.castShadow = true; g.add(blob);
@@ -225,16 +217,15 @@ function makeSlime(isl, ox, oz) {
   });
   g.position.set(isl.x + ox, isl.y + 0.45, isl.z + oz);
   scene.add(g);
-  slimes.push({
+  const s = {
     g, blob, isl, alive: true, respawn: 0,
     home: new THREE.Vector3(isl.x + ox, isl.y + 0.45, isl.z + oz),
     dir: Math.random() * Math.PI * 2, turn: 0, phase: Math.random() * 6
-  });
+  };
+  slimes.push(s);
+  isl.slimes.push(s);
+  return s;
 }
-makeSlime(islands[0], 4, -2); makeSlime(islands[0], -3, -5);
-makeSlime(islands[1], 1, 1); makeSlime(islands[3], -1, 0);
-makeSlime(islands[4], 2, 2); makeSlime(islands[6], 0, -2);
-makeSlime(islands[7], 1, 1); makeSlime(islands[5], 0, 0);
 
 // ---------- collectibles ----------
 const $ = id => document.getElementById(id);
@@ -242,46 +233,33 @@ const collect = [];
 const seedMat = new THREE.MeshBasicMaterial({ color: 0xfff08a });
 const starMat = new THREE.MeshBasicMaterial({ color: 0xffd6f2 });
 const ringMat = new THREE.MeshBasicMaterial({ color: 0x8af0d8 });
+seedMat.userData.shared = starMat.userData.shared = ringMat.userData.shared = true;
 
-function addSeed(x, y, z) {
+// sparks are worth: seed 1, ring 2, star 3 — the single currency that drives unlocks
+function addSeed(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.32), seedMat);
-  s.position.set(x, y + 1, z);
+  s.position.set(isl.x + ox, isl.y + 1, isl.z + oz);
   s.add(new THREE.PointLight(0xffe98a, 0.6, 4));
   scene.add(s);
-  collect.push({ mesh: s, kind: 'seed', r: 1.1 });
+  const c = { mesh: s, kind: 'seed', r: 1.1, worth: 1 };
+  collect.push(c); isl.collect.push(c);
 }
-function addStar(x, y, z) {
+function addStar(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.TetrahedronGeometry(0.4), starMat);
-  s.position.set(x, y + 1.2, z);
+  s.position.set(isl.x + ox, isl.y + 1.2, isl.z + oz);
   scene.add(s);
-  collect.push({ mesh: s, kind: 'star', r: 1.1 });
+  const c = { mesh: s, kind: 'star', r: 1.2, worth: 3 };
+  collect.push(c); isl.collect.push(c);
 }
-function addRing(x, y, z) {
+function addRing(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.12, 10, 28), ringMat);
-  s.position.set(x, y + 2.2, z);
+  s.position.set(isl.x + ox, isl.y + 2.2, isl.z + oz);
   scene.add(s);
-  collect.push({ mesh: s, kind: 'ring', r: 1.4 });
+  const c = { mesh: s, kind: 'ring', r: 1.4, worth: 2 };
+  collect.push(c); isl.collect.push(c);
 }
 
-islands.forEach((isl, i) => {
-  if (i === 0) return;
-  addSeed(isl.x + 1, isl.y, isl.z);
-  if (i % 2 === 0) addSeed(isl.x - 2, isl.y, isl.z + 1.5);
-});
-addSeed(4, 0, -4); addSeed(-4, 0, 4);
-addStar(islands[2].x, islands[2].y + 3.6, islands[2].z);
-addStar(islands[8].x, islands[8].y, islands[8].z);
-addStar(islands[9].x, islands[9].y + 3.1, islands[9].z);
-addRing(9, 1.5, -4); addRing(-8, 2, 6); addRing(15, 3.5, 3);
-addRing(-2, 3, -21); addRing(31, 7.5, -14);
-
-const totals = { seed: 0, star: 0, ring: 0 };
-collect.forEach(c => totals[c.kind]++);
-const got = { seed: 0, star: 0, ring: 0 };
 let bops = 0;
-$('tSeed').textContent = totals.seed;
-$('tStar').textContent = totals.star;
-$('tRing').textContent = totals.ring;
 
 let msgTimer;
 function say(text) {
@@ -317,6 +295,157 @@ function chime(freq) {
     o.start(); o.stop(ac.currentTime + 0.4);
   } catch (e) { /* audio unavailable */ }
 }
+
+// ---------- progression: sparks -> unlocks, saved to localStorage ----------
+// movement + ability state (mutated as unlocks are earned)
+let WALK = 7, SPRINT = 11, JUMP = 9.5, GRAV = -22, MAXJUMPS = 2, GLIDE = -3.5, MAGNET = 0, hasTrail = false;
+
+const UNLOCKS = [
+  { id: 'jump',   at: 8,   name: 'Springy Boots', msg: 'Springy Boots unlocked — you jump higher now!',        apply() { JUMP = 11.2; } },
+  { id: 'glide',  at: 18,  name: 'Feather Glide',  msg: 'Feather Glide — hold jump while falling to float!',    apply() { GLIDE = -2.1; } },
+  { id: 'triple', at: 32,  name: 'Triple Hop',     msg: 'Triple Hop — tap jump three times in the air!',        apply() { MAXJUMPS = 3; } },
+  { id: 'magnet', at: 50,  name: 'Spark Magnet',   msg: 'Spark Magnet — sparks drift toward you now!',          apply() { MAGNET = 1.8; } },
+  { id: 'speed',  at: 72,  name: 'Wind Runner',    msg: 'Wind Runner — hold Shift to dash even faster!',        apply() { SPRINT = 14.5; } },
+  { id: 'trail',  at: 100, name: 'Sparkle Trail',  msg: 'Sparkle Trail — you leave stardust when you run!',      apply() { hasTrail = true; } },
+  { id: 'float',  at: 140, name: 'Cloud Steps',    msg: 'Cloud Steps — jumps feel floatier and higher!',        apply() { GRAV = -18; JUMP = 12.2; } },
+];
+
+const SAVE_KEY = 'skyseed_save_v1';
+let progress = { sparks: 0, unlocked: [], biomes: [] };
+try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
+function saveProgress() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ } }
+
+function nextUnlock() { return UNLOCKS.find(u => !progress.unlocked.includes(u.id)); }
+function refreshGoal() {
+  const nu = nextUnlock();
+  const spEl = $('cSpark'); if (spEl) spEl.textContent = progress.sparks;
+  const gEl = $('nextGoal'), inEl = $('nextIn');
+  if (nu) { if (gEl) gEl.textContent = nu.name; if (inEl) inEl.textContent = Math.max(0, nu.at - progress.sparks); }
+  else { if (gEl) gEl.textContent = 'Sky Explorer'; if (inEl) inEl.textContent = '∞'; }
+}
+function applyUnlock(u, announce) {
+  u.apply();
+  if (!progress.unlocked.includes(u.id)) progress.unlocked.push(u.id);
+  if (announce) {
+    say(u.msg); chime(1180);
+    burst(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), 0xfff2a0, 30);
+  }
+}
+// re-apply everything already earned in a past session (silent)
+for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
+
+function addSparks(n) {
+  progress.sparks += n;
+  let nu = nextUnlock();
+  while (nu && progress.sparks >= nu.at) { applyUnlock(nu, true); nu = nextUnlock(); }
+  refreshGoal();
+  saveProgress();
+}
+
+// ---------- endless world: procedural island chunks ----------
+const CELL = 44, GEN_R = 3, KEEP_R = 4;
+const cells = new Map(); // "cx,cz" -> [island,...]
+
+function hash2(a, b) {
+  let h = ((a | 0) * 374761393 + (b | 0) * 668265263) >>> 0;
+  h = ((h ^ (h >>> 13)) * 1274126177) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function makeRng(seed) {
+  let s = seed >>> 0 || 1;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+function decorate(isl, rand) {
+  const r = isl.r;
+  const spot = () => { const a = rand() * 6.283, d = rand() * (r - 1.6); return [Math.cos(a) * d, Math.sin(a) * d]; };
+  if (rand() < 0.7) { const [x, z] = spot(); makeTree(isl, x, z); }
+  if (rand() < 0.4) { const [x, z] = spot(); makeTree(isl, x, z); }
+  if (rand() < 0.5) { const [x, z] = spot(); makePillar(isl, x, z, 2 + rand() * 3); }
+  if (rand() < 0.35) { const [x, z] = spot(); makeFall(isl, x, z); }
+  const seeds = 1 + Math.floor(rand() * 3);
+  for (let i = 0; i < seeds; i++) { const [x, z] = spot(); addSeed(isl, x, z); }
+  if (rand() < 0.5) { const [x, z] = spot(); addRing(isl, x, z); }
+  if (rand() < 0.28) { const [x, z] = spot(); addStar(isl, x, z); }
+  const ns = rand() < 0.6 ? 1 : (rand() < 0.5 ? 0 : 2);
+  for (let i = 0; i < ns; i++) { const [x, z] = spot(); makeSlime(isl, x, z, rand); }
+}
+
+function generateCell(cx, cz) {
+  const key = cx + ',' + cz;
+  if (cells.has(key)) return;
+  const list = []; cells.set(key, list);
+  const rand = makeRng(hash2(cx, cz));
+  if (cx === 0 && cz === 0) {
+    const home = makeIsland(0, 0, 0, 10, BIOMES[0], rand);
+    decorate(home, rand);
+    list.push(home);
+    return;
+  }
+  const count = rand() < 0.68 ? 1 : (rand() < 0.55 ? 0 : 2);
+  for (let i = 0; i < count; i++) {
+    const x = cx * CELL + (rand() - 0.5) * CELL * 0.6;
+    const z = cz * CELL + (rand() - 0.5) * CELL * 0.6;
+    const y = (rand() - 0.5) * 9;
+    const r = 4 + rand() * 5;
+    const isl = makeIsland(x, y, z, r, biomeFor(x, z), rand);
+    decorate(isl, rand);
+    list.push(isl);
+  }
+}
+
+function despawnIsland(isl) {
+  scene.remove(isl.group);
+  isl.group.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (!m.userData.shared) m.dispose(); }); }
+  });
+  for (const c of isl.collect) {
+    scene.remove(c.mesh);
+    if (c.mesh.geometry) c.mesh.geometry.dispose();
+    const gi = collect.indexOf(c); if (gi >= 0) collect.splice(gi, 1);
+  }
+  for (const s of isl.slimes) {
+    scene.remove(s.g);
+    s.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) o.material.dispose(); });
+    const gi = slimes.indexOf(s); if (gi >= 0) slimes.splice(gi, 1);
+  }
+  const ii = islands.indexOf(isl); if (ii >= 0) islands.splice(ii, 1);
+}
+
+let lastCX = 1e9, lastCZ = 1e9;
+function ensureChunks(px, pz) {
+  const ccx = Math.round(px / CELL), ccz = Math.round(pz / CELL);
+  if (ccx === lastCX && ccz === lastCZ) return;
+  lastCX = ccx; lastCZ = ccz;
+  for (let dz = -GEN_R; dz <= GEN_R; dz++)
+    for (let dx = -GEN_R; dx <= GEN_R; dx++)
+      generateCell(ccx + dx, ccz + dz);
+  for (const [key, list] of cells) {
+    const [kx, kz] = key.split(',').map(Number);
+    if (Math.abs(kx - ccx) > KEEP_R || Math.abs(kz - ccz) > KEEP_R) {
+      for (const isl of list) despawnIsland(isl);
+      cells.delete(key);
+    }
+  }
+}
+
+// biome discovery: announce the first time the player sets foot in a new region
+let curBiome = BIOMES[0].name;
+function checkBiome(x, z) {
+  const b = biomeFor(x, z);
+  if (b.name === curBiome) return;
+  curBiome = b.name;
+  if (!progress.biomes.includes(b.name)) {
+    progress.biomes.push(b.name);
+    say('You reached the ' + b.name + '!');
+    chime(900); saveProgress();
+  }
+}
+
+// build the starting area now so there is ground under Miru at spawn
+ensureChunks(0, 0);
+refreshGoal();
 
 // ---------- input ----------
 const keys = {};
@@ -403,8 +532,10 @@ if (punchBtn) {
 const vel = new THREE.Vector3();
 let onGround = false, jumps = 0, running = false;
 let punchTime = -1; // >=0 while punch anim plays
+let trailTick = 0;
+const skyTmp = new THREE.Color(), fogTmp = new THREE.Color();
 const spawn = new THREE.Vector3(0, 0, 3);
-const WALK = 7, SPRINT = 11, JUMP = 9.5, GRAV = -22;
+// WALK/SPRINT/JUMP/GRAV/MAXJUMPS/GLIDE/MAGNET live in the progression block above
 
 function groundHeight(x, z) {
   let best = -Infinity;
@@ -507,7 +638,7 @@ function animate() {
 
     if (jumpPressed) {
       if (onGround) { vel.y = JUMP; jumps = 1; chime(520); }
-      else if (jumps === 1) { vel.y = JUMP * 0.9; jumps = 2; chime(620); }
+      else if (jumps < MAXJUMPS) { vel.y = JUMP * 0.9; jumps++; chime(560 + jumps * 40); }
     }
     jumpPressed = false;
 
@@ -515,11 +646,25 @@ function animate() {
     punchPressed = false;
 
     vel.y += GRAV * dt;
-    if (vel.y < 0 && keys.Space) vel.y = Math.max(vel.y, -3.5);
+    if (vel.y < 0 && keys.Space) vel.y = Math.max(vel.y, GLIDE);
 
     player.position.x += vel.x * dt;
     player.position.z += vel.z * dt;
     player.position.y += vel.y * dt;
+
+    // stream new islands in / far ones out, and greet new biomes
+    ensureChunks(player.position.x, player.position.z);
+    checkBiome(player.position.x, player.position.z);
+    // ease sky + fog toward the current biome so each region feels distinct
+    const bh = biomeFor(player.position.x, player.position.z);
+    scene.background.lerp(skyTmp.setHex(bh.sky), dt * 0.8);
+    scene.fog.color.lerp(fogTmp.setHex(bh.fog), dt * 0.8);
+
+    // sparkle trail cosmetic (unlocked later)
+    if (hasTrail && running && onGround) {
+      trailTick -= dt;
+      if (trailTick <= 0) { burst(player.position.clone().add(new THREE.Vector3(0, 0.3, 0)), 0xfff2c0, 4); trailTick = 0.12; }
+    }
 
     const gh = groundHeight(player.position.x, player.position.z);
     if (gh > -Infinity && player.position.y <= gh && vel.y <= 0) {
@@ -583,24 +728,20 @@ function animate() {
       tails.forEach((tail, i) => { tail.rotation.x = Math.sin(t * 3 + i) * 0.18 - (onGround ? 0 : 0.5); });
     }
 
-    // collectibles
-    for (const c of collect) {
-      if (c.done) continue;
+    // collectibles (descending so splice-on-pickup is safe)
+    const head = player.position.clone().add(new THREE.Vector3(0, 1.2, 0));
+    for (let i = collect.length - 1; i >= 0; i--) {
+      const c = collect[i];
       c.mesh.rotation.y += dt * 2;
-      const d = c.mesh.position.distanceTo(player.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
-      if (d < c.r) {
-        c.done = true;
+      const d = c.mesh.position.distanceTo(head);
+      // Spark Magnet: nearby sparks drift toward Miru
+      if (MAGNET > 0 && d < 5) c.mesh.position.lerp(head, Math.min(1, dt * 3.5));
+      if (d < c.r + MAGNET) {
         burst(c.mesh.position, c.mesh.material.color);
         scene.remove(c.mesh);
-        got[c.kind]++;
-        $('cSeed').textContent = got.seed;
-        $('cStar').textContent = got.star;
-        $('cRing').textContent = got.ring;
+        collect.splice(i, 1);
         chime(c.kind === 'seed' ? 880 : c.kind === 'ring' ? 740 : 990);
-        const left = collect.filter(x => !x.done).length;
-        if (left === 0) say("You found everything! Miru's garden will bloom again!");
-        else if (c.kind === 'star') say('A wishing star! ' + left + ' treasures left.');
-        else if (c.kind === 'ring') say('Sky ring! Nice jump!');
+        addSparks(c.worth);
       }
     }
   }
