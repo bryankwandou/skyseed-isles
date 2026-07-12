@@ -504,6 +504,111 @@ function grantPetXp(n) {
 if (Array.isArray(progress.pets)) for (const p of progress.pets) makePet(p.color, p.level, p.name);
 updateBuddyHud();
 
+// ---------- build mode: place & decorate your islands, saved forever ----------
+let buildMode = false, buildType = 'tree';
+const buildMeshes = [];
+
+function makeBuildMesh(type) {
+  const g = new THREE.Group();
+  if (type === 'tree') {
+    const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 1.4, 7), new THREE.MeshToonMaterial({ color: 0x8a5a3b }));
+    tr.position.y = 0.7; tr.castShadow = true; g.add(tr);
+    const lf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 0), new THREE.MeshToonMaterial({ color: 0x74c96a }));
+    lf.position.y = 1.7; lf.castShadow = true; g.add(lf);
+  } else if (type === 'flower') {
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), new THREE.MeshToonMaterial({ color: 0x5fae4e }));
+    st.position.y = 0.35; g.add(st);
+    const petals = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.1, 6, 10), new THREE.MeshToonMaterial({ color: 0xff8fc0 }));
+    petals.position.y = 0.72; petals.rotation.x = Math.PI / 2; g.add(petals);
+    const mid = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), new THREE.MeshToonMaterial({ color: 0xffe08a }));
+    mid.position.y = 0.72; g.add(mid);
+  } else if (type === 'mushroom') {
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 7), new THREE.MeshToonMaterial({ color: 0xf3ead0 }));
+    st.position.y = 0.25; g.add(st);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8, 0, 6.283, 0, 1.7), new THREE.MeshToonMaterial({ color: 0xe8564f }));
+    cap.position.y = 0.5; cap.castShadow = true; g.add(cap);
+  } else if (type === 'lantern') {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6), new THREE.MeshToonMaterial({ color: 0x6a5540 }));
+    post.position.y = 0.55; g.add(post);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd98a }));
+    glow.position.y = 1.15; g.add(glow);
+    glow.add(new THREE.PointLight(0xffcf7a, 0.7, 6));
+  } else { // crystal
+    const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), new THREE.MeshToonMaterial({ color: 0x8fd0ff }));
+    cr.position.y = 0.55; cr.castShadow = true; g.add(cr);
+    cr.add(new THREE.PointLight(0x8fd0ff, 0.5, 5));
+  }
+  return g;
+}
+
+function spawnBuild(b) {
+  const g = makeBuildMesh(b.type);
+  g.position.set(b.x, b.y, b.z);
+  scene.add(g);
+  buildMeshes.push(g);
+}
+
+function targetBuildPoint() {
+  const fwd = new THREE.Vector3(Math.sin(body.rotation.y), 0, Math.cos(body.rotation.y));
+  const p = player.position.clone().addScaledVector(fwd, 2.6);
+  const gh = groundHeight(p.x, p.z);
+  if (gh === -Infinity) return null;
+  p.y = gh; return p;
+}
+
+const ghost = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.08, 8, 20),
+  new THREE.MeshBasicMaterial({ color: 0x7cff9b, transparent: true, opacity: 0.85 }));
+ghost.rotation.x = Math.PI / 2; ghost.visible = false; scene.add(ghost);
+
+function placeBuild() {
+  const tp = targetBuildPoint();
+  if (!tp) { say('Face an island to build there.'); return; }
+  const b = { x: +tp.x.toFixed(2), y: +tp.y.toFixed(2), z: +tp.z.toFixed(2), type: buildType };
+  spawnBuild(b);
+  if (!Array.isArray(progress.builds)) progress.builds = [];
+  progress.builds.push(b); saveProgress();
+  burst(tp.clone().add(new THREE.Vector3(0, 0.4, 0)), 0xbfffcf, 12);
+  chime(700);
+}
+
+function undoBuild() {
+  if (!Array.isArray(progress.builds) || !progress.builds.length) { say('Nothing to undo yet.'); return; }
+  progress.builds.pop(); saveProgress();
+  const g = buildMeshes.pop();
+  if (g) { scene.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) o.material.dispose(); }); }
+  chime(360);
+}
+
+function setBuildType(t) {
+  buildType = t;
+  document.querySelectorAll('#palette [data-t]').forEach(btn => btn.classList.toggle('sel', btn.dataset.t === t));
+}
+
+function toggleBuild(on) {
+  buildMode = on === undefined ? !buildMode : on;
+  $('buildBtn').classList.toggle('on', buildMode);
+  $('palette').classList.toggle('on', buildMode);
+  if (!buildMode) ghost.visible = false;
+  say(buildMode ? 'Build mode on — face a spot and tap Place!' : 'Back to playing!');
+}
+
+// wire the build controls
+$('buildBtn').addEventListener('click', () => toggleBuild());
+$('placeBtn').addEventListener('click', placeBuild);
+$('undoBtn').addEventListener('click', undoBuild);
+document.querySelectorAll('#palette [data-t]').forEach(btn =>
+  btn.addEventListener('click', () => setBuildType(btn.dataset.t)));
+addEventListener('keydown', e => {
+  if (e.code === 'KeyB') toggleBuild();
+  if (!buildMode) return;
+  if (e.code === 'KeyU') undoBuild();
+  const n = { Digit1: 'tree', Digit2: 'flower', Digit3: 'mushroom', Digit4: 'lantern', Digit5: 'crystal' }[e.code];
+  if (n) setBuildType(n);
+});
+
+// restore everything the child built in a past session
+if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
+
 // ---------- input ----------
 const keys = {};
 let jumpPressed = false, punchPressed = false;
@@ -521,6 +626,7 @@ const isTouch = matchMedia('(pointer:coarse)').matches;
 // desktop: pointer lock mouse-look; click while locked = punch
 renderer.domElement.addEventListener('click', () => {
   if (!started) return;
+  if (buildMode) { placeBuild(); return; }
   if (document.pointerLockElement !== renderer.domElement) {
     renderer.domElement.requestPointerLock();
   } else {
@@ -816,6 +922,13 @@ function animate() {
         if (bondT > 0.8) { befriend(near); bondT = 0; }
       } else bondT = 0;
     } else bondT = 0;
+
+    // build placement indicator
+    if (buildMode) {
+      const tp = targetBuildPoint();
+      if (tp) { ghost.position.set(tp.x, tp.y + 0.06, tp.z); ghost.visible = true; ghost.rotation.z += dt * 1.5; }
+      else ghost.visible = false;
+    }
 
     // breadcrumb trail so buddies follow in a conga line
     trail.unshift(new THREE.Vector3(player.position.x, player.position.y, player.position.z));

@@ -54,6 +54,27 @@
     #stick { display:block; }
     #help { display:none; }
   }
+  /* build mode */
+  #buildBtn {
+    position:fixed; z-index:22; right:24px; top:96px; width:64px; height:44px;
+    border-radius:14px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
+    color:#fff; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    user-select:none; touch-action:none; cursor:pointer;
+  }
+  #buildBtn.on { background:#ffb24d; border-color:#fff; }
+  #palette {
+    position:fixed; z-index:22; left:50%; bottom:16px; transform:translateX(-50%);
+    display:none; gap:6px; flex-wrap:wrap; justify-content:center; max-width:94vw;
+    background:rgba(20,40,80,.32); backdrop-filter:blur(8px); padding:8px; border-radius:16px;
+  }
+  #palette.on { display:flex; }
+  #palette button {
+    min-width:46px; min-height:44px; padding:6px 12px; border-radius:12px; border:2px solid transparent;
+    background:rgba(255,255,255,.85); color:#1d2433; font-weight:700; font-size:13px; cursor:pointer;
+    user-select:none; touch-action:manipulation;
+  }
+  #palette button.sel { border-color:#ff7ab0; background:#fff; }
+  #palette .act { background:#8fd0f5; }
   #title {
     position:fixed; inset:0; z-index:50; display:flex; flex-direction:column;
     align-items:center; justify-content:center; gap:18px;
@@ -77,7 +98,7 @@
   <h1>SKYSEED ISLES</h1>
   <p>Miru the sky gardener drifts across islands that never run out. Gather sparks, unlock new moves, and wander into snow, sunset and starlit lands that keep appearing the further you roam.</p>
   <button id="startBtn">Start Adventure</button>
-  <p style="font-size:13px">WASD to run · mouse to look around · Space to jump · walk up to a slime to make a friend · F to bop · everything is saved</p>
+  <p style="font-size:13px">WASD run · mouse look · Space jump · walk up to a slime to make a friend · B to build & decorate · F to bop · everything is saved</p>
 </div>
 <div id="hud">
   Sparks <b id="cSpark">0</b><br>
@@ -86,10 +107,20 @@
   Slimes bopped <b id="cBop">0</b>
 </div>
 <div id="msg"></div>
-<div id="help">Click world to grab camera · mouse to look · WASD run · Shift sprint · Space jump ×2 · F or click to punch · scroll to zoom</div>
+<div id="help">Click world to grab camera · mouse to look · WASD run · Shift sprint · Space jump · walk up to a slime to befriend it · B to build · F to bop · scroll to zoom</div>
 <div id="stick"><div id="knob"></div></div>
 <button class="tbtn" id="jumpBtn" aria-label="Jump">JUMP</button>
 <button class="tbtn" id="punchBtn" aria-label="Punch" style="right:120px; bottom:44px;">POW</button>
+<button id="buildBtn" aria-label="Toggle build mode">Build</button>
+<div id="palette" aria-label="Building palette">
+  <button data-t="tree" class="sel">Tree</button>
+  <button data-t="flower">Flower</button>
+  <button data-t="mushroom">Mushroom</button>
+  <button data-t="lantern">Lantern</button>
+  <button data-t="crystal">Crystal</button>
+  <button id="placeBtn" class="act">Place</button>
+  <button id="undoBtn" class="act">Undo</button>
+</div>
 <script type="importmap">
 { "imports": {
   "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
