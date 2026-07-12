@@ -340,6 +340,7 @@ function addSparks(n) {
   while (nu && progress.sparks >= nu.at) { applyUnlock(nu, true); nu = nextUnlock(); }
   refreshGoal();
   saveProgress();
+  grantPetXp(n); // sparks also feed your buddies so they grow
 }
 
 // ---------- endless world: procedural island chunks ----------
@@ -447,6 +448,62 @@ function checkBiome(x, z) {
 ensureChunks(0, 0);
 refreshGoal();
 
+// ---------- buddies: befriend slimes, they follow you and grow ----------
+const pets = [];
+const trail = []; // breadcrumb of recent player positions (conga line)
+const PET_NAMES = ['Boba', 'Mochi', 'Pudding', 'Kiwi', 'Pixel', 'Sunny', 'Cloud', 'Berry', 'Nori', 'Taro'];
+
+function heartBurst(pos) { burst(pos.clone().add(new THREE.Vector3(0, 0.6, 0)), 0xff8fc0, 14); }
+
+function makePet(color, level, name) {
+  const g = new THREE.Group();
+  const blob = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 12), new THREE.MeshToonMaterial({ color }));
+  blob.scale.y = 0.82; blob.castShadow = true; g.add(blob);
+  [-1, 1].forEach(s => {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), new THREE.MeshBasicMaterial({ color: 0x2a2f45 }));
+    e.position.set(0.16 * s, 0.16, 0.42); g.add(e);
+    const ch = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffb0cf }));
+    ch.position.set(0.3 * s, 0.0, 0.36); g.add(ch);
+  });
+  g.position.copy(player.position);
+  scene.add(g);
+  const pet = { g, blob, color, level: level || 1, xp: 0, name: name || PET_NAMES[Math.floor(Math.random() * PET_NAMES.length)], phase: Math.random() * 6 };
+  pets.push(pet);
+  return pet;
+}
+
+function updateBuddyHud() {
+  const el = $('cBuddy');
+  if (el) el.textContent = pets.length ? pets.length + (pets.length > 1 ? ' friends' : ' friend') : 'none yet';
+}
+function savePets() { progress.pets = pets.map(p => ({ level: p.level, color: p.color, name: p.name })); saveProgress(); }
+
+function befriend(slime) {
+  let gi = slimes.indexOf(slime); if (gi >= 0) slimes.splice(gi, 1);
+  gi = slime.isl.slimes.indexOf(slime); if (gi >= 0) slime.isl.slimes.splice(gi, 1);
+  const color = slime.blob.material.color.getHex();
+  scene.remove(slime.g);
+  slime.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) o.material.dispose(); });
+  const pet = makePet(color, 1);
+  heartBurst(pet.g.position); chime(1240);
+  say(pet.name + ' is your friend now!');
+  savePets(); updateBuddyHud();
+}
+
+function grantPetXp(n) {
+  if (!pets.length) return;
+  for (const p of pets) {
+    p.xp += n;
+    const need = p.level * 8;
+    if (p.xp >= need && p.level < 8) { p.xp -= need; p.level++; heartBurst(p.g.position); chime(1320); say(p.name + ' grew to Lv ' + p.level + '!'); }
+  }
+  savePets(); updateBuddyHud();
+}
+
+// bring back buddies made in a past session
+if (Array.isArray(progress.pets)) for (const p of progress.pets) makePet(p.color, p.level, p.name);
+updateBuddyHud();
+
 // ---------- input ----------
 const keys = {};
 let jumpPressed = false, punchPressed = false;
@@ -532,7 +589,7 @@ if (punchBtn) {
 const vel = new THREE.Vector3();
 let onGround = false, jumps = 0, running = false;
 let punchTime = -1; // >=0 while punch anim plays
-let trailTick = 0;
+let trailTick = 0, bondT = 0;
 const skyTmp = new THREE.Color(), fogTmp = new THREE.Color();
 const spawn = new THREE.Vector3(0, 0, 3);
 // WALK/SPRINT/JUMP/GRAV/MAXJUMPS/GLIDE/MAGNET live in the progression block above
@@ -743,6 +800,39 @@ function animate() {
         chime(c.kind === 'seed' ? 880 : c.kind === 'ring' ? 740 : 990);
         addSparks(c.worth);
       }
+    }
+
+    // befriend: linger next to a wild slime (without punching) and it joins you
+    if (punchTime < 0) {
+      let near = null, nd = 1.8;
+      for (const s of slimes) {
+        if (!s.alive) continue;
+        const dd = Math.hypot(s.g.position.x - player.position.x, s.g.position.z - player.position.z);
+        if (dd < nd) { nd = dd; near = s; }
+      }
+      if (near) {
+        bondT += dt;
+        if (Math.random() < 0.16) burst(near.g.position.clone().add(new THREE.Vector3(0, 0.75, 0)), 0xff9ec6, 3);
+        if (bondT > 0.8) { befriend(near); bondT = 0; }
+      } else bondT = 0;
+    } else bondT = 0;
+
+    // breadcrumb trail so buddies follow in a conga line
+    trail.unshift(new THREE.Vector3(player.position.x, player.position.y, player.position.z));
+    if (trail.length > 260) trail.pop();
+    for (let i = 0; i < pets.length; i++) {
+      const p = pets[i];
+      const target = trail[Math.min(trail.length - 1, (i + 1) * 18)] || player.position;
+      p.g.position.x += (target.x - p.g.position.x) * Math.min(1, dt * 6);
+      p.g.position.z += (target.z - p.g.position.z) * Math.min(1, dt * 6);
+      const gh = groundHeight(p.g.position.x, p.g.position.z);
+      const baseY = (gh > -Infinity ? gh : target.y) + 0.4;
+      const hop = Math.abs(Math.sin(t * 4 + p.phase));
+      p.g.position.y = baseY + hop * 0.35;
+      p.g.scale.setScalar(1 + (p.level - 1) * 0.11);
+      p.blob.scale.set(1 + (1 - hop) * 0.12, 0.82 - (1 - hop) * 0.12, 1 + (1 - hop) * 0.12);
+      const dx = target.x - p.g.position.x, dz = target.z - p.g.position.z;
+      if (dx * dx + dz * dz > 0.02) p.g.rotation.y = Math.atan2(dx, dz);
     }
   }
 
