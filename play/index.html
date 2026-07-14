@@ -18,6 +18,13 @@
     user-select:none;
   }
   #hud b { font-variant-numeric:tabular-nums; }
+  #accountBar {
+    position:fixed; top:12px; right:12px; z-index:12;
+    background:var(--panel); backdrop-filter:blur(8px); border-radius:12px;
+    padding:7px 13px; color:var(--ink); font-size:13px; box-shadow:0 4px 18px rgba(20,40,80,.18);
+    user-select:none; max-width:60vw;
+  }
+  #accountBar a { color:#a06bf0; font-weight:600; text-decoration:none; }
   #msg {
     position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:10;
     background:var(--panel); backdrop-filter:blur(8px); border-radius:999px;
@@ -106,6 +113,7 @@
   Buddies <b id="cBuddy">none yet</b><br>
   Slimes bopped <b id="cBop">0</b>
 </div>
+<div id="accountBar">…</div>
 <div id="msg"></div>
 <div id="help">Click world to grab camera · mouse to look · WASD run · Shift sprint · Space jump · walk up to a slime to befriend it · B to build · F to bop · scroll to zoom</div>
 <div id="stick"><div id="knob"></div></div>

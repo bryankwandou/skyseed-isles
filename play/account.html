@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skyseed Isles — Sign in</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>" />
+<style>
+  :root { --ink:#1d2433; --muted:#5b6b82; --line:#d6e2ee; --brand:#a06bf0; --brand2:#ff8fb8; }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    min-height:100vh; font-family:"Segoe UI",system-ui,sans-serif; color:var(--ink);
+    background:linear-gradient(180deg,#8fd0f5 0%,#c9ecff 55%,#eafff2 100%);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .card {
+    width:100%; max-width:420px; background:#fff; border-radius:22px; padding:28px 26px 24px;
+    box-shadow:0 18px 50px rgba(30,60,120,.22);
+  }
+  .brand { text-align:center; margin-bottom:6px; }
+  .brand h1 { font-size:26px; letter-spacing:1px; color:#1d3a5f; }
+  .brand p { color:var(--muted); font-size:13px; margin-top:4px; }
+  .tabs { display:flex; gap:6px; background:#eef4fb; border-radius:14px; padding:5px; margin:18px 0; }
+  .tabs button {
+    flex:1; border:none; background:transparent; padding:10px; border-radius:10px; cursor:pointer;
+    font-weight:700; font-size:14px; color:var(--muted);
+  }
+  .tabs button.on { background:#fff; color:var(--ink); box-shadow:0 2px 8px rgba(30,60,120,.12); }
+  form { display:none; flex-direction:column; gap:13px; }
+  form.on { display:flex; }
+  label { font-size:13px; font-weight:600; color:var(--ink); display:block; margin-bottom:5px; }
+  input[type=text], input[type=email], input[type=password] {
+    width:100%; padding:12px 13px; border:1.5px solid var(--line); border-radius:12px; font-size:15px;
+    color:var(--ink); background:#fbfdff; transition:border-color .15s, box-shadow .15s;
+  }
+  input:focus-visible {
+    outline:none; border-color:var(--brand);
+    box-shadow:0 0 0 3px rgba(160,107,240,.22);
+  }
+  .check { display:flex; gap:9px; align-items:flex-start; font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .check input { margin-top:2px; width:17px; height:17px; flex:0 0 auto; accent-color:var(--brand); }
+  .check a { color:var(--brand); font-weight:600; }
+  .primary {
+    margin-top:4px; border:none; cursor:pointer; color:#fff; font-weight:700; font-size:16px;
+    padding:13px; border-radius:12px; background:linear-gradient(135deg,var(--brand2),var(--brand));
+    box-shadow:0 8px 20px rgba(120,80,220,.28); transition:transform .12s, filter .12s;
+  }
+  .primary:hover { transform:translateY(-1px); }
+  .primary:disabled { opacity:.6; cursor:progress; }
+  .primary:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
+  .google {
+    display:flex; align-items:center; justify-content:center; gap:9px; width:100%;
+    padding:12px; border:1.5px solid var(--line); border-radius:12px; background:#fff;
+    font-weight:600; font-size:14px; color:var(--muted); cursor:not-allowed;
+  }
+  .google span.soon { font-size:11px; background:#eef4fb; padding:2px 8px; border-radius:99px; }
+  .divider { display:flex; align-items:center; gap:10px; color:#a9b7c8; font-size:12px; margin:4px 0; }
+  .divider::before, .divider::after { content:""; height:1px; background:var(--line); flex:1; }
+  .msg { min-height:18px; font-size:13px; font-weight:600; text-align:center; }
+  .msg.err { color:#d64b6a; }
+  .msg.ok { color:#2f9e6f; }
+  .foot { text-align:center; margin-top:16px; font-size:13px; }
+  .foot a { color:var(--brand); font-weight:600; text-decoration:none; }
+  .hint { font-size:11.5px; color:#9aa8ba; margin-top:3px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">
+    <h1>SKYSEED ISLES</h1>
+    <p>Save your sparks, buddies and islands to your own account.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button id="tabLogin" class="on" role="tab" aria-selected="true">Log in</button>
+    <button id="tabRegister" role="tab" aria-selected="false">Sign up</button>
+  </div>
+
+  <!-- LOGIN -->
+  <form id="loginForm" class="on" autocomplete="on" novalidate>
+    <div>
+      <label for="li_user">Username or email</label>
+      <input id="li_user" name="username" type="text" autocomplete="username" required />
+    </div>
+    <div>
+      <label for="li_pass">Password</label>
+      <input id="li_pass" name="password" type="password" autocomplete="current-password" required />
+    </div>
+    <button class="primary" type="submit">Log in</button>
+    <div class="divider">or</div>
+    <button type="button" class="google" disabled aria-disabled="true">
+      Continue with Google <span class="soon">coming soon</span>
+    </button>
+    <div class="msg" id="li_msg" role="status" aria-live="polite"></div>
+  </form>
+
+  <!-- REGISTER -->
+  <form id="registerForm" autocomplete="on" novalidate>
+    <div>
+      <label for="rg_user">Username</label>
+      <input id="rg_user" name="username" type="text" autocomplete="username" required
+             pattern="[A-Za-z0-9_]{3,20}" />
+      <div class="hint">3–20 letters, numbers or underscores.</div>
+    </div>
+    <div>
+      <label for="rg_email">Email</label>
+      <input id="rg_email" name="email" type="email" autocomplete="email" required />
+    </div>
+    <div>
+      <label for="rg_pass">Password</label>
+      <input id="rg_pass" name="password" type="password" autocomplete="new-password" required minlength="8" />
+      <div class="hint">At least 8 characters.</div>
+    </div>
+    <div>
+      <label for="rg_confirm">Confirm password</label>
+      <input id="rg_confirm" name="confirm" type="password" autocomplete="new-password" required minlength="8" />
+    </div>
+    <label class="check">
+      <input id="rg_terms" type="checkbox" required />
+      <span>I agree to the <a href="#" id="openTerms">Terms &amp; Conditions</a>.</span>
+    </label>
+    <label class="check">
+      <input id="rg_privacy" type="checkbox" required />
+      <span>I accept the <a href="#" id="openPrivacy">Privacy agreement</a> — this account only stores game progress.</span>
+    </label>
+    <button class="primary" type="submit">Create account</button>
+    <div class="divider">or</div>
+    <button type="button" class="google" disabled aria-disabled="true">
+      Continue with Google <span class="soon">coming soon</span>
+    </button>
+    <div class="msg" id="rg_msg" role="status" aria-live="polite"></div>
+  </form>
+
+  <div class="foot"><a href="./index.html">← Back to the game</a></div>
+</div>
+<script src="./account.js"></script>
+</body>
+</html>
