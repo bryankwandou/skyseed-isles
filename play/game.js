@@ -313,7 +313,10 @@ const UNLOCKS = [
 const SAVE_KEY = 'skyseed_save_v1';
 let progress = { sparks: 0, unlocked: [], biomes: [] };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
-function saveProgress() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ } }
+function saveProgress() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
+  syncServer();
+}
 
 function nextUnlock() { return UNLOCKS.find(u => !progress.unlocked.includes(u.id)); }
 function refreshGoal() {
@@ -608,6 +611,60 @@ addEventListener('keydown', e => {
 
 // restore everything the child built in a past session
 if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
+
+// ---------- account sync: load & save progress to the server when logged in ----------
+let serverUser = null, syncTimer = null;
+
+function clearPets() {
+  for (const p of pets) { scene.remove(p.g); p.g.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  pets.length = 0;
+}
+function clearBuilds() {
+  for (const g of buildMeshes) { scene.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  buildMeshes.length = 0;
+}
+
+function applyServerProgress(p) {
+  if (!p || typeof p !== 'object') return;
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [] }, p);
+  for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
+  clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name);
+  clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
+  refreshGoal(); updateBuddyHud();
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
+}
+
+function syncServer() {
+  if (!serverUser) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    fetch('/api/progress', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ progress }) }).catch(() => {});
+  }, 1200);
+}
+
+function renderAccountBar(u) {
+  const bar = $('accountBar');
+  if (!bar) return;
+  if (u && u.username) {
+    bar.innerHTML = 'Hi, <b></b> · <a href="#" id="logoutLink">Log out</a>';
+    bar.querySelector('b').textContent = u.username;
+    const ll = $('logoutLink');
+    if (ll) ll.addEventListener('click', e => { e.preventDefault(); fetch('/api/logout', { method: 'POST' }).then(() => location.reload()); });
+  } else {
+    bar.innerHTML = '<a href="./account.html">Log in / Sign up</a> to save across devices';
+  }
+}
+
+fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => {
+  if (u && u.username) {
+    serverUser = u.username;
+    applyServerProgress(u.progress);
+    renderAccountBar(u);
+    say('Welcome back, ' + u.username + '!');
+  } else {
+    renderAccountBar(null);
+  }
+}).catch(() => renderAccountBar(null));
 
 // ---------- input ----------
 const keys = {};
