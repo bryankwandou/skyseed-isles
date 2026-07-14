@@ -1,0 +1,196 @@
+# Skyseed Isles — Living Checklist
+
+Granular, executable task list. Every checked item was verified in a real browser or against the real database before being marked done. This file grows with the project — quality over raw count.
+
+Legend: `[x]` done + verified · `[ ]` open · `[~]` in progress · `[!]` blocked (reason noted)
+
+---
+
+## 0. Foundation — world, character, gameplay
+
+### 0.1 Rendering & scene
+- [x] WebGL renderer with antialiasing and capped pixel ratio
+- [x] PCF soft shadow mapping (2048px sun shadow)
+- [x] Hemisphere + directional lighting
+- [x] Fog + sky color per biome, smoothly lerped as the player travels
+- [x] Cloud parallax layer (14 drifting clusters)
+- [x] Resize handling for any viewport
+
+### 0.2 Endless world
+- [x] Deterministic cell hash → RNG (same cell always generates the same island)
+- [x] Chunk streaming: generate cells in radius 3, despawn beyond radius 4
+- [x] Full geometry/material dispose on despawn (no VRAM leak)
+- [x] 5 biome rings: Meadow, Sunset Grove, Snow, Starfall, Candy Reef
+- [x] Biome-colored grass/dirt/tufts/tree leaves
+- [x] Decorations parented to island groups (single-remove despawn)
+- [x] Waterfall ribbons, pillars, trees placed procedurally
+- [x] Home island always at origin with guaranteed ground at spawn
+- [x] Biome discovery announcement + persisted list
+- [ ] More biomes (desert, caverns, autumn, aurora)
+- [ ] Landmark wonder islands
+- [ ] Day/night cycle
+- [ ] Weather particles per biome
+
+### 0.3 Character
+- [x] VRM anime avatar loads, replaces primitive rig
+- [x] Primitive fallback if VRM fails (kids never see a broken model)
+- [x] Run animation: arms + legs swing, spine lean
+- [x] Punch animation on right arm
+- [x] Idle breathing/sway
+- [x] Cast shadows on all avatar meshes
+- [ ] Loading progress bar for the 11.5MB VRM
+- [ ] Compressed VRM (meshopt/Draco) to cut load time
+- [ ] Cosmetic outfits/colors
+
+### 0.4 Movement & camera
+- [x] Camera-relative WASD/joystick movement
+- [x] Sprint (Shift), jump, double jump, glide
+- [x] Pointer-lock mouse-look (desktop)
+- [x] Touch drag camera (mobile right side)
+- [x] Scroll zoom (5–16 units)
+- [x] Q key camera rotate fallback
+- [x] Fall recovery: wind carries you back, zero punishment
+- [ ] Camera collision with terrain
+- [ ] Coyote time + jump buffering
+- [ ] Landing dust/squash feedback
+
+### 0.5 Combat-lite & slimes
+- [x] Punch via F / click / POW button
+- [x] Forward-cone hit detection
+- [x] Slime hop-and-wander AI with island bounds
+- [x] Squash/stretch hop animation
+- [x] Harmless bop: burst + giggle message + 6s respawn
+- [x] 4 slime color variants
+- [ ] Rare shiny slime variants
+- [ ] Ambient critters (butterflies, birds)
+
+### 0.6 Progression
+- [x] Sparks currency (seed=1, ring=2, star=3)
+- [x] 7-step unlock ladder: Springy Boots → Feather Glide → Triple Hop → Spark Magnet → Wind Runner → Sparkle Trail → Cloud Steps
+- [x] Unlock announcements with burst + chime
+- [x] HUD shows next goal + sparks remaining
+- [x] localStorage persistence
+- [x] Server persistence when logged in
+- [x] Spark Magnet actually attracts collectibles
+- [x] Sparkle Trail cosmetic renders while running
+- [ ] Journal/Codex screen
+- [ ] Rare treasures per biome
+
+### 0.7 Buddies (pets)
+- [x] Befriend by lingering near a slime (0.8s, heart particles)
+- [x] Conga-line follow via breadcrumb trail
+- [x] Hop animation + ground snapping + level-based scale
+- [x] Names from a friendly pool
+- [x] Level up (max 8) fed by spark pickups
+- [x] Persisted to save (local + server)
+- [x] HUD buddy counter
+- [ ] Feed/pet care interactions
+- [ ] More buddy species
+- [ ] Buddy tricks
+
+### 0.8 Build mode
+- [x] Toggle via button or B key
+- [x] 5 piece types: tree, flower, mushroom, lantern, crystal
+- [x] Placement ghost ring showing target spot
+- [x] Place via button/click, undo via button/U key
+- [x] Number keys 1–5 select pieces
+- [x] Persisted (local + server), restored on load
+- [x] Lantern/crystal emit real light
+- [ ] Grid snap + rotate + stacking
+- [ ] More piece types + recolor
+- [ ] Redo stack
+
+## 1. Accounts & backend
+
+### 1.1 Database (Neon Postgres)
+- [x] `users` table: username, email, bcrypt hash, is_admin, JSONB progress, timestamps
+- [x] Unique constraints on username + email (verified: duplicates rejected)
+- [x] Schema setup script (`npm run setup-db`), idempotent
+- [x] Admin QA account seeded with max progress (999,999 sparks, 7 skills, 5 biomes, 4 max-level buddies)
+- [x] Admin password stored ONLY as bcrypt hash, never logged
+- [ ] Rotate the Neon password that was exposed in chat (**parent action required**)
+- [ ] Backup/restore runbook
+
+### 1.2 API (Vercel serverless)
+- [x] POST /api/register — validation: username regex, email format, min-8 password, confirm match, terms + privacy required
+- [x] POST /api/login — accepts username or email; verified 401 on wrong password
+- [x] GET /api/me — session check, returns profile + progress
+- [x] GET/PUT /api/progress — load/save with 200KB payload guard
+- [x] POST /api/logout — clears cookie
+- [x] Sessions: signed JWT in httpOnly Secure SameSite cookie, 30-day expiry
+- [x] AUTH_SECRET: 96-char random, stored only in Vercel env + gitignored .env.local
+- [x] Live production test PASSED: register → me → save → load → wrong-pw 401 → logout
+- [x] Live admin login PASSED: isAdmin true, full progress returned
+- [x] QA test users deleted after verification
+- [ ] Rate limiting on auth endpoints
+- [ ] Password reset via email magic link
+- [ ] Google sign-in (button present as "coming soon")
+
+### 1.3 Account UI (`play/account.html`)
+- [x] Tabbed login / sign-up
+- [x] Register: username, email, password, confirm password
+- [x] Required checkboxes: Terms & Conditions + Privacy agreement (with readable popups)
+- [x] Google button visible, disabled, "coming soon"
+- [x] Proper labels, autocomplete attributes, focus rings, aria-live error messages
+- [x] Already-logged-in detection → redirect to game
+- [x] Inline errors from server shown to the user
+- [ ] Password strength meter
+- [ ] Show/hide password toggle
+
+### 1.4 Game ↔ server sync
+- [x] On boot: /api/me → apply server progress (rebuild buddies, builds, unlocks)
+- [x] Debounced (1.2s) progress PUT on every save
+- [x] Account bar: greeting + logout, or login/signup link
+- [x] Guest mode still fully works via localStorage
+- [ ] "Saved" toast + offline indicator
+- [ ] Guest → account progress migration prompt
+- [ ] Conflict handling between devices
+
+## 2. Security & privacy
+- [x] No secrets in the repo (checked: only .env.example tracked)
+- [x] .env.local gitignored; AUTH_SECRET generated fresh, never displayed
+- [x] Passwords bcrypt-hashed (cost 10)
+- [x] httpOnly cookies (JS cannot read the session)
+- [x] SQL via parameterized tagged templates (no injection)
+- [x] Progress payload size cap
+- [!] Neon DB password rotation — BLOCKED on parent (was pasted into chat; treat as leaked)
+- [ ] Rate limiting / lockout backoff
+- [ ] Input sanitation audit round 2
+- [ ] COPPA-minded data minimization review
+- [ ] Right-to-delete flow
+
+## 3. Deploy & ops
+- [x] Vercel production deploy with serverless functions
+- [x] DATABASE_URL via Neon integration; AUTH_SECRET added to Production
+- [x] Live URL serves game + API: https://skyseed-isles.vercel.app
+- [!] GitHub push — BLOCKED: account `nayrbryanGaming` suspended; commits queued locally (see §5)
+- [ ] Push queued commits when GitHub access is restored (or to alt repo once provided)
+- [ ] Error monitoring + alerts
+- [ ] Load test
+
+## 4. Verification log (what was actually tested)
+- [x] Node syntax check on every JS file after every edit
+- [x] Pure-logic harness: deterministic worldgen, RNG bounds, biome rings, unlock ordering — ALL PASS
+- [x] Headless-browser (real Edge) run: game renders, HUD wired, chunk streaming while walking, zero page errors
+- [x] Headless-browser: saved buddy loads from localStorage; live befriending observed
+- [x] Headless-browser: build mode — 3 pieces placed, persisted, undo verified
+- [x] Real Neon DB test: admin verify, wrong-pw reject, register, duplicate block, progress save, cleanup — ALL PASS
+- [x] Production API test (live URL): full auth + progress round-trip — ALL PASS
+- [x] Production admin login: 200, isAdmin, 999,999 sparks, 7 skills, 4 pets
+
+## 5. Queued for GitHub (local commits awaiting push)
+1. `feat(game): endless procedural world + biomes + persistent unlock ladder (Tahap 1)`
+2. `feat(game): befriendable pet slimes that follow in a conga line and level up (Tahap 2)`
+3. `feat(game): build mode — place & decorate islands ... (Tahap 3)`
+4. `feat(auth): Neon-backed accounts — register/login/logout, server-synced progress, account UI`
+5. (pending) `docs: 100-day plan + living checklist`
+
+## 6. Next up (from PLAN-100-DAYS.md Phase 1)
+- [ ] Camera collision
+- [ ] Coyote time + jump buffering
+- [ ] Landing/run particles + footstep audio
+- [ ] Background music per biome + mute
+- [ ] Settings + pause menu
+- [ ] VRM loading progress bar
+- [ ] FPS governor
+- [ ] First-run tutorial prompts
