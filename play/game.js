@@ -38,11 +38,15 @@ const islands = []; // live island objects near the player
 // Biomes ring outward from the origin, so every stretch of exploring shows a
 // visibly new kind of land — the core "endless discovery" hook.
 const BIOMES = [
-  { name: 'Meadow Isles',  grass: 0x6fce4e, tuft: 0x8fe06a, dirt: 0x9a6b4f, leaf: 0xff9ec6, sky: 0x8fd0f5, fog: 0xa8ddf8 },
-  { name: 'Sunset Grove',  grass: 0xe0a24e, tuft: 0xf3c06a, dirt: 0x8a5540, leaf: 0xff8f6a, sky: 0xf6c98f, fog: 0xf8dcc0 },
-  { name: 'Snow Isles',    grass: 0xdfeaf2, tuft: 0xffffff, dirt: 0x8fa6b9, leaf: 0xbfe0ff, sky: 0xcfe8ff, fog: 0xe6f4ff },
-  { name: 'Starfall Isles',grass: 0x454a7a, tuft: 0x7f88e0, dirt: 0x2a2f45, leaf: 0x9ad0ff, sky: 0x2e3360, fog: 0x3a4070 },
-  { name: 'Candy Reef',    grass: 0xff9ec6, tuft: 0xffc2dd, dirt: 0xc06a9a, leaf: 0xa06bf0, sky: 0xffd6ef, fog: 0xffe0f2 },
+  { name: 'Meadow Isles',   grass: 0x6fce4e, tuft: 0x8fe06a, dirt: 0x9a6b4f, leaf: 0xff9ec6, sky: 0x8fd0f5, fog: 0xa8ddf8, root: 220 },
+  { name: 'Sunset Grove',   grass: 0xe0a24e, tuft: 0xf3c06a, dirt: 0x8a5540, leaf: 0xff8f6a, sky: 0xf6c98f, fog: 0xf8dcc0, root: 196 },
+  { name: 'Snow Isles',     grass: 0xdfeaf2, tuft: 0xffffff, dirt: 0x8fa6b9, leaf: 0xbfe0ff, sky: 0xcfe8ff, fog: 0xe6f4ff, root: 247 },
+  { name: 'Starfall Isles', grass: 0x454a7a, tuft: 0x7f88e0, dirt: 0x2a2f45, leaf: 0x9ad0ff, sky: 0x2e3360, fog: 0x3a4070, root: 175 },
+  { name: 'Candy Reef',     grass: 0xff9ec6, tuft: 0xffc2dd, dirt: 0xc06a9a, leaf: 0xa06bf0, sky: 0xffd6ef, fog: 0xffe0f2, root: 262 },
+  { name: 'Desert Dunes',   grass: 0xe8cf8a, tuft: 0xf3e0a8, dirt: 0xc09a5f, leaf: 0x8fce6a, sky: 0xf8e3b8, fog: 0xf6ead0, root: 208 },
+  { name: 'Crystal Caverns',grass: 0x6a5f9a, tuft: 0xa48fe0, dirt: 0x3a3455, leaf: 0x8fd0ff, sky: 0x51487f, fog: 0x655a96, root: 165 },
+  { name: 'Autumn Woods',   grass: 0xd08a4e, tuft: 0xe8a860, dirt: 0x7a4a35, leaf: 0xe85f3f, sky: 0xf0c8a0, fog: 0xf3d8bc, root: 233 },
+  { name: 'Aurora Peaks',   grass: 0xbfeadf, tuft: 0xdffff2, dirt: 0x6f8fa6, leaf: 0x9affd0, sky: 0x9fe8d8, fog: 0xc8f6ea, root: 294 },
 ];
 function biomeFor(x, z) { return BIOMES[Math.floor(Math.hypot(x, z) / 130) % BIOMES.length]; }
 
@@ -197,8 +201,16 @@ let vrm = null, vrmBones = null;
     };
     if (vrmBones.lArm) vrmBones.lArm.rotation.z = 1.15;
     if (vrmBones.rArm) vrmBones.rArm.rotation.z = -1.15;
+    const lb = $('loadBar'); if (lb) lb.parentElement.style.display = 'none';
     say('Miru has arrived!');
-  }, undefined, err => console.warn('VRM load failed, keeping placeholder', err));
+  }, xhr => {
+    // loading progress bar on the title screen while the avatar streams in
+    const lb = $('loadBar');
+    if (lb && xhr.total) lb.style.width = Math.min(100, Math.round(xhr.loaded / xhr.total * 100)) + '%';
+  }, err => {
+    const lb = $('loadBar'); if (lb) lb.parentElement.style.display = 'none';
+    console.warn('VRM load failed, keeping placeholder', err);
+  });
 }
 
 // ---------- slimes (boppable, harmless) ----------
@@ -283,17 +295,77 @@ function burst(pos, color, count = 20) {
   bursts.push({ pts, vel: velArr, life: 0.8 });
 }
 
-let ac;
-function chime(freq) {
+// ---------- settings (persisted) ----------
+const SETTINGS_KEY = 'skyseed_settings_v1';
+const settings = Object.assign({
+  music: 0.5, sfx: 0.8, quality: 'high', sensitivity: 1, invert: false
+}, (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { return {}; } })());
+function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* blocked */ } }
+function applyQuality() {
+  const low = settings.quality === 'low';
+  renderer.shadowMap.enabled = !low;
+  renderer.setPixelRatio(low ? 1 : Math.min(devicePixelRatio, 2));
+  scene.fog.far = low ? 120 : 180;
+  sun.castShadow = !low;
+}
+
+// ---------- audio: sfx + generative ambient music ----------
+let ac, musicBus, sfxBus, musicTimer = null, curScale = null;
+function ensureAudio() {
+  if (ac) return true;
   try {
-    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    musicBus = ac.createGain(); musicBus.gain.value = settings.music * 0.16; musicBus.connect(ac.destination);
+    sfxBus = ac.createGain(); sfxBus.gain.value = settings.sfx; sfxBus.connect(ac.destination);
+    return true;
+  } catch (e) { return false; }
+}
+function setVolumes() {
+  if (musicBus) musicBus.gain.value = settings.music * 0.16;
+  if (sfxBus) sfxBus.gain.value = settings.sfx;
+}
+function chime(freq) {
+  if (!ensureAudio()) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.frequency.value = freq; o.type = 'sine';
+  g.gain.setValueAtTime(0.15, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.35);
+  o.connect(g).connect(sfxBus);
+  o.start(); o.stop(ac.currentTime + 0.4);
+}
+function thud(freq, dur) { // soft filtered noise for steps/landings
+  if (!ensureAudio()) return;
+  const len = Math.floor(ac.sampleRate * dur);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = ac.createBufferSource(); src.buffer = buf;
+  const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+  const g = ac.createGain(); g.gain.value = 0.22;
+  src.connect(f).connect(g).connect(sfxBus);
+  src.start();
+}
+// gentle pad: two-note chord from a pentatonic scale rooted per biome, new note every ~2.4s
+function musicTick() {
+  if (!ac || settings.music <= 0.01) return;
+  const root = (biomeFor(player.position.x, player.position.z).root || 220);
+  const penta = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2];
+  for (let k = 0; k < 2; k++) {
     const o = ac.createOscillator(), g = ac.createGain();
-    o.frequency.value = freq; o.type = 'sine';
-    g.gain.setValueAtTime(0.15, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.35);
-    o.connect(g).connect(ac.destination);
-    o.start(); o.stop(ac.currentTime + 0.4);
-  } catch (e) { /* audio unavailable */ }
+    o.type = k ? 'triangle' : 'sine';
+    o.frequency.value = root * penta[Math.floor(Math.random() * penta.length)] * (k ? 0.5 : 1);
+    const t0 = ac.currentTime;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(0.5, t0 + 0.8);
+    g.gain.linearRampToValueAtTime(0, t0 + 3.4);
+    o.connect(g).connect(musicBus);
+    o.start(t0); o.stop(t0 + 3.5);
+  }
+}
+function startMusic() {
+  if (!ensureAudio() || musicTimer) return;
+  musicTick();
+  musicTimer = setInterval(musicTick, 2400);
 }
 
 // ---------- progression: sparks -> unlocks, saved to localStorage ----------
@@ -638,7 +710,9 @@ function syncServer() {
   if (!serverUser) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
-    fetch('/api/progress', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ progress }) }).catch(() => {});
+    fetch('/api/progress', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ progress }) })
+      .then(r => { if (r.ok) toast('Saved ✓'); else toast('Offline — saved on this device'); })
+      .catch(() => toast('Offline — saved on this device'));
   }, 1200);
 }
 
@@ -692,8 +766,9 @@ renderer.domElement.addEventListener('click', () => {
 });
 addEventListener('mousemove', e => {
   if (document.pointerLockElement !== renderer.domElement) return;
-  camYaw -= e.movementX * 0.0028;
-  camPitch = Math.min(1.15, Math.max(-0.35, camPitch + e.movementY * 0.0022));
+  const s = settings.sensitivity, inv = settings.invert ? -1 : 1;
+  camYaw -= e.movementX * 0.0028 * s;
+  camPitch = Math.min(1.15, Math.max(-0.35, camPitch + e.movementY * 0.0022 * s * inv));
 });
 addEventListener('wheel', e => {
   camDist = Math.min(16, Math.max(5, camDist + e.deltaY * 0.008));
@@ -711,8 +786,8 @@ renderer.domElement.addEventListener('touchstart', e => {
 renderer.domElement.addEventListener('touchmove', e => {
   for (const t of e.changedTouches) {
     if (t.identifier !== camTouch) continue;
-    camYaw -= (t.clientX - lastTX) * 0.006;
-    camPitch = Math.min(1.15, Math.max(-0.35, camPitch + (t.clientY - lastTY) * 0.004));
+    camYaw -= (t.clientX - lastTX) * 0.006 * settings.sensitivity;
+    camPitch = Math.min(1.15, Math.max(-0.35, camPitch + (t.clientY - lastTY) * 0.004 * settings.sensitivity * (settings.invert ? -1 : 1)));
     lastTX = t.clientX; lastTY = t.clientY;
   }
 }, { passive: true });
@@ -753,6 +828,7 @@ const vel = new THREE.Vector3();
 let onGround = false, jumps = 0, running = false;
 let punchTime = -1; // >=0 while punch anim plays
 let trailTick = 0, bondT = 0;
+let coyoteT = 0, jumpBufT = 0, footT = 0, wasAirborne = false, airTime = 0;
 const skyTmp = new THREE.Color(), fogTmp = new THREE.Color();
 const spawn = new THREE.Vector3(0, 0, 3);
 // WALK/SPRINT/JUMP/GRAV/MAXJUMPS/GLIDE/MAGNET live in the progression block above
@@ -772,9 +848,55 @@ $('startBtn').addEventListener('click', () => {
   const t = $('title');
   t.style.opacity = '0';
   setTimeout(() => t.remove(), 650);
+  applyQuality();
+  startMusic();
   chime(660);
   say(isTouch ? 'Drag the right side to look around!' : 'Click the world to grab the camera!');
 });
+
+// ---------- pause + settings menu ----------
+function setPaused(on) {
+  paused = on;
+  const m = $('pauseMenu');
+  if (m) m.classList.toggle('on', on);
+  if (on && document.pointerLockElement) document.exitPointerLock();
+}
+addEventListener('keydown', e => {
+  if (e.code === 'Escape' && started) setPaused(!paused);
+});
+const pauseBtn = $('pauseBtn');
+if (pauseBtn) pauseBtn.addEventListener('click', () => setPaused(true));
+const resumeBtn = $('resumeBtn');
+if (resumeBtn) resumeBtn.addEventListener('click', () => setPaused(false));
+
+// settings controls (present in pause menu)
+function bindSetting(id, apply) {
+  const el = $(id);
+  if (el) el.addEventListener('input', () => { apply(el); saveSettings(); });
+  return el;
+}
+{
+  const mv = bindSetting('setMusic', el => { settings.music = +el.value; setVolumes(); });
+  if (mv) mv.value = settings.music;
+  const sv = bindSetting('setSfx', el => { settings.sfx = +el.value; setVolumes(); });
+  if (sv) sv.value = settings.sfx;
+  const qv = bindSetting('setQuality', el => { settings.quality = el.value; govApplied = false; applyQuality(); });
+  if (qv) qv.value = settings.quality;
+  const sens = bindSetting('setSens', el => { settings.sensitivity = +el.value; });
+  if (sens) sens.value = settings.sensitivity;
+  const inv = $('setInvert');
+  if (inv) { inv.checked = settings.invert; inv.addEventListener('change', () => { settings.invert = inv.checked; saveSettings(); }); }
+}
+
+// "saved" micro-toast, used by the server sync
+let toastTimer;
+function toast(text) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = text; el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 1400);
+}
 
 const clock = new THREE.Clock();
 
@@ -798,10 +920,32 @@ function doPunch(t) {
   }
 }
 
+// FPS governor: if the frame rate stays low, quietly drop expensive features
+let fpsAcc = 0, fpsN = 0, govApplied = false;
+function governFps(dt) {
+  if (govApplied || settings.quality === 'low') return;
+  fpsAcc += dt; fpsN++;
+  if (fpsAcc >= 2) {
+    const fps = fpsN / fpsAcc;
+    fpsAcc = 0; fpsN = 0;
+    if (fps < 28) {
+      govApplied = true;
+      renderer.setPixelRatio(1);
+      renderer.shadowMap.enabled = false;
+      sun.castShadow = false;
+      say('Smoothing things out for your device!');
+    }
+  }
+}
+
+let paused = false;
+
 function animate() {
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = Math.min(clock.getDelta(), 0.05);
+  const dt = paused ? 0 : rawDt;
   const t = clock.elapsedTime;
+  governFps(rawDt);
 
   for (const c of clouds) {
     c.position.x += c.userData.v * dt;
@@ -856,11 +1000,15 @@ function animate() {
       body.rotation.y += d * Math.min(1, dt * 12);
     }
 
-    if (jumpPressed) {
-      if (onGround) { vel.y = JUMP; jumps = 1; chime(520); }
-      else if (jumps < MAXJUMPS) { vel.y = JUMP * 0.9; jumps++; chime(560 + jumps * 40); }
-    }
+    // forgiving platforming: jump buffer + coyote time
+    if (jumpPressed) jumpBufT = 0.14;
     jumpPressed = false;
+    coyoteT = onGround ? 0.12 : Math.max(0, coyoteT - dt);
+    if (jumpBufT > 0) {
+      if (onGround || coyoteT > 0) { vel.y = JUMP; jumps = 1; coyoteT = 0; jumpBufT = 0; chime(520); thud(900, 0.05); }
+      else if (jumps > 0 && jumps < MAXJUMPS) { vel.y = JUMP * 0.9; jumps++; jumpBufT = 0; chime(560 + jumps * 40); }
+      else jumpBufT -= dt;
+    }
 
     if (punchPressed && punchTime < 0) doPunch(t);
     punchPressed = false;
@@ -893,6 +1041,24 @@ function animate() {
     } else {
       onGround = false;
     }
+
+    // landing feedback: dust puff + soft thud scaled by fall time
+    if (onGround && wasAirborne && airTime > 0.18) {
+      burst(player.position.clone().add(new THREE.Vector3(0, 0.15, 0)), 0xd9cfc0, airTime > 0.6 ? 14 : 8);
+      thud(airTime > 0.6 ? 320 : 480, 0.08);
+    }
+    wasAirborne = !onGround;
+    airTime = onGround ? 0 : airTime + dt;
+
+    // footsteps + run dust while on ground
+    if (running && onGround) {
+      footT -= dt;
+      if (footT <= 0) {
+        thud(650, 0.045);
+        burst(player.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0xcfc5b8, 3);
+        footT = (keys.ShiftLeft || keys.ShiftRight) ? 0.22 : 0.3;
+      }
+    } else footT = 0;
 
     if (player.position.y < -25) {
       player.position.copy(spawn).add(new THREE.Vector3(0, 6, 0));
@@ -961,6 +1127,7 @@ function animate() {
         scene.remove(c.mesh);
         collect.splice(i, 1);
         chime(c.kind === 'seed' ? 880 : c.kind === 'ring' ? 740 : 990);
+        if (navigator.vibrate) navigator.vibrate(12);
         addSparks(c.worth);
       }
     }
@@ -1030,6 +1197,9 @@ function animate() {
       player.position.y + 1.6 + sp * camDist,
       player.position.z + oz
     );
+    // camera collision: never sink below the island the camera hovers over
+    const cgh = groundHeight(target.x, target.z);
+    if (cgh > -Infinity && target.y < cgh + 0.7) target.y = cgh + 0.7;
     camera.position.lerp(target, 0.35);
   } else {
     camera.position.set(Math.sin(t * 0.15) * 22, 10, Math.cos(t * 0.15) * 22);

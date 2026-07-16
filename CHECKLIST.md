@@ -185,12 +185,21 @@ Legend: `[x]` done + verified · `[ ]` open · `[~]` in progress · `[!]` blocke
 4. `feat(auth): Neon-backed accounts — register/login/logout, server-synced progress, account UI`
 5. (pending) `docs: 100-day plan + living checklist`
 
-## 6. Next up (from PLAN-100-DAYS.md Phase 1)
-- [ ] Camera collision
-- [ ] Coyote time + jump buffering
-- [ ] Landing/run particles + footstep audio
-- [ ] Background music per biome + mute
-- [ ] Settings + pause menu
-- [ ] VRM loading progress bar
-- [ ] FPS governor
-- [ ] First-run tutorial prompts
+## 6. Phase 1 — Days 1–11 (verified in headless browser)
+- [x] Day 1: Camera collision — camera clamped above island tops
+- [x] Day 2: Coyote time (0.12s) + jump buffering (0.14s)
+- [x] Day 3: Landing dust (scaled by fall time) + run dust + landing thud
+- [x] Day 4: Footstep/jump/land SFX (filtered-noise synth, zero audio files)
+- [x] Day 5: Generative ambient music — pentatonic pad, root note per biome, volume control
+- [~] Day 6: Bloom — deferred (post-processing postponed for perf; collectibles glow via point lights)
+- [x] Day 7: VRM loading progress bar on the title screen
+- [x] Day 8: Settings menu — music/sfx volume, quality (Pretty/Fast), camera speed, invert look; persisted
+- [x] Day 9: Mobile polish — 72px touch buttons, haptic tick on pickup
+- [x] Day 10: Pause menu — Esc / gear button, resume, account & home links (verified open/close headless)
+- [x] Day 11: FPS governor — auto drop pixel ratio + shadows if fps < 28 for 2s
+- [x] Bonus: "Saved ✓ / Offline" sync toast + 4 new biomes (Desert, Crystal Caverns, Autumn, Aurora)
+
+## 7. Next up
+- [ ] Day 12: high-contrast HUD + larger text options
+- [ ] Day 13: first-run tutorial prompts
+- [ ] Day 16+: Phase 2 content (day/night, journal, rare treasures)
