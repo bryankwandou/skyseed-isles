@@ -199,7 +199,22 @@ Legend: `[x]` done + verified · `[ ]` open · `[~]` in progress · `[!]` blocke
 - [x] Day 11: FPS governor — auto drop pixel ratio + shadows if fps < 28 for 2s
 - [x] Bonus: "Saved ✓ / Offline" sync toast + 4 new biomes (Desert, Crystal Caverns, Autumn, Aurora)
 
-## 7. Next up
-- [ ] Day 12: high-contrast HUD + larger text options
-- [ ] Day 13: first-run tutorial prompts
-- [ ] Day 16+: Phase 2 content (day/night, journal, rare treasures)
+## 7. Days 12–15 + Phase 2 slice + Phase 3 slice (this pass)
+- [x] Day 12: High-contrast HUD + Bigger-text modes (settings, persisted, body classes)
+- [x] Day 13: First-run contextual tutorial tips (befriend / build / glide / talk) — each shows once, ever
+- [x] Day 15: QA pass (syntax + headless run)
+- [x] P2: Gentle day/night — 5-min cycle, never darker than dusk; sun/hemi/sky/fog all follow
+- [x] P2: Moonpetal rare treasure (worth 5, ~8% spawn) + journal count
+- [x] P2: Shiny golden slimes (6%) + journal count on befriend
+- [x] P2: Great Tree wonder islands (1 per ~23 cells, deterministic, guaranteed rewards, discovery fanfare, persisted)
+- [x] P2: Sky Journal / Codex overlay (J key / 📖 button) — 8 tracked stats
+- [x] P3: Skykeeper NPC (glowing figure, float animation, point light) on the home island
+- [x] P3: 6-quest story chain with warm dialogue, rewards, and per-quest progress snapshots
+- [x] P3: RPG dialog panel + quest tracker line in HUD + TALK button (touch) / E key (desktop)
+- [x] Bops now persisted in progress (survives reload/server sync)
+
+## 8. Next up
+- [ ] P2: buddy care (feed/pet), cosmetic wardrobe
+- [ ] P4: build 2.0 (rotate, more pieces)
+- [ ] P5: family dashboard for the 12 kids
+- [ ] P6: PWA + Google sign-in

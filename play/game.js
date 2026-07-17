@@ -24,7 +24,8 @@ sun.shadow.camera.left = -60; sun.shadow.camera.right = 60;
 sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
 sun.shadow.camera.far = 200;
 scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xbfe8ff, 0x7fbf6a, 0.9));
+const hemi = new THREE.HemisphereLight(0xbfe8ff, 0x7fbf6a, 0.9);
+scene.add(hemi);
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -218,8 +219,10 @@ const slimes = [];
 const slimeColors = [0x7fe8c9, 0xffd98a, 0xff9ec6, 0xa0c8ff];
 function makeSlime(isl, ox, oz, rand) {
   const g = new THREE.Group();
-  const col = slimeColors[Math.floor((rand ? rand() : Math.random()) * slimeColors.length)];
-  const blob = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12),
+  const rv = rand ? rand() : Math.random();
+  const shiny = rv < 0.06; // rare golden slime for the Journal
+  const col = shiny ? 0xfff2c8 : slimeColors[Math.floor(rv * slimeColors.length)];
+  const blob = new THREE.Mesh(new THREE.SphereGeometry(shiny ? 0.62 : 0.55, 14, 12),
     new THREE.MeshToonMaterial({ color: col }));
   blob.scale.y = 0.8; blob.castShadow = true; g.add(blob);
   [-1, 1].forEach(s => {
@@ -230,7 +233,7 @@ function makeSlime(isl, ox, oz, rand) {
   g.position.set(isl.x + ox, isl.y + 0.45, isl.z + oz);
   scene.add(g);
   const s = {
-    g, blob, isl, alive: true, respawn: 0,
+    g, blob, isl, alive: true, respawn: 0, shiny,
     home: new THREE.Vector3(isl.x + ox, isl.y + 0.45, isl.z + oz),
     dir: Math.random() * Math.PI * 2, turn: 0, phase: Math.random() * 6
   };
@@ -270,8 +273,18 @@ function addRing(isl, ox, oz) {
   const c = { mesh: s, kind: 'ring', r: 1.4, worth: 2 };
   collect.push(c); isl.collect.push(c);
 }
+const petalMat = new THREE.MeshBasicMaterial({ color: 0xd8b8ff });
+petalMat.userData.shared = true;
+function addMoonpetal(isl, ox, oz) {
+  const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), petalMat);
+  s.position.set(isl.x + ox, isl.y + 1.3, isl.z + oz);
+  s.add(new THREE.PointLight(0xd8b8ff, 0.9, 6));
+  scene.add(s);
+  const c = { mesh: s, kind: 'petal', r: 1.2, worth: 5 };
+  collect.push(c); isl.collect.push(c);
+}
 
-let bops = 0;
+// bops now lives in progress.bops (persisted)
 
 let msgTimer;
 function say(text) {
@@ -298,8 +311,13 @@ function burst(pos, color, count = 20) {
 // ---------- settings (persisted) ----------
 const SETTINGS_KEY = 'skyseed_settings_v1';
 const settings = Object.assign({
-  music: 0.5, sfx: 0.8, quality: 'high', sensitivity: 1, invert: false
+  music: 0.5, sfx: 0.8, quality: 'high', sensitivity: 1, invert: false,
+  contrast: false, bigText: false, tut: {}
 }, (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { return {}; } })());
+function applyA11y() {
+  document.body.classList.toggle('hiContrast', !!settings.contrast);
+  document.body.classList.toggle('bigText', !!settings.bigText);
+}
 function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* blocked */ } }
 function applyQuality() {
   const low = settings.quality === 'low';
@@ -383,7 +401,7 @@ const UNLOCKS = [
 ];
 
 const SAVE_KEY = 'skyseed_save_v1';
-let progress = { sparks: 0, unlocked: [], biomes: [] };
+let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null } };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
@@ -394,6 +412,7 @@ function nextUnlock() { return UNLOCKS.find(u => !progress.unlocked.includes(u.i
 function refreshGoal() {
   const nu = nextUnlock();
   const spEl = $('cSpark'); if (spEl) spEl.textContent = progress.sparks;
+  const bopEl = $('cBop'); if (bopEl) bopEl.textContent = progress.bops || 0;
   const gEl = $('nextGoal'), inEl = $('nextIn');
   if (nu) { if (gEl) gEl.textContent = nu.name; if (inEl) inEl.textContent = Math.max(0, nu.at - progress.sparks); }
   else { if (gEl) gEl.textContent = 'Sky Explorer'; if (inEl) inEl.textContent = '∞'; }
@@ -443,8 +462,29 @@ function decorate(isl, rand) {
   for (let i = 0; i < seeds; i++) { const [x, z] = spot(); addSeed(isl, x, z); }
   if (rand() < 0.5) { const [x, z] = spot(); addRing(isl, x, z); }
   if (rand() < 0.28) { const [x, z] = spot(); addStar(isl, x, z); }
+  if (rand() < 0.08) { const [x, z] = spot(); addMoonpetal(isl, x, z); } // rare treasure
   const ns = rand() < 0.6 ? 1 : (rand() < 0.5 ? 0 : 2);
   for (let i = 0; i < ns; i++) { const [x, z] = spot(); makeSlime(isl, x, z, rand); }
+}
+
+// landmark "Great Tree" wonder island: huge tree, guaranteed rewards
+function makeWonder(isl, rand) {
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.4, 9, 10),
+    new THREE.MeshToonMaterial({ color: 0x7a4a30 }));
+  trunk.position.set(0, 4.5, 0); trunk.castShadow = true;
+  isl.group.add(trunk);
+  for (let i = 0; i < 4; i++) {
+    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6 - i * 0.35, 0),
+      new THREE.MeshToonMaterial({ color: isl.biome.leaf }));
+    const a = i * 1.7;
+    leaf.position.set(Math.cos(a) * 1.4, 8.2 + i * 1.1, Math.sin(a) * 1.4);
+    leaf.castShadow = true;
+    isl.group.add(leaf);
+  }
+  addMoonpetal(isl, 0, 2.4);
+  addStar(isl, -2.2, 0);
+  addSeed(isl, 2.2, 1); addSeed(isl, -1.5, -2);
+  isl.wonder = true;
 }
 
 function generateCell(cx, cz) {
@@ -458,13 +498,16 @@ function generateCell(cx, cz) {
     list.push(home);
     return;
   }
-  const count = rand() < 0.68 ? 1 : (rand() < 0.55 ? 0 : 2);
+  // roughly 1 in 23 cells hosts a Great Tree wonder island
+  const isWonder = hash2(cx * 7 + 3, cz * 11 - 5) % 23 === 0;
+  const count = isWonder ? 1 : (rand() < 0.68 ? 1 : (rand() < 0.55 ? 0 : 2));
   for (let i = 0; i < count; i++) {
     const x = cx * CELL + (rand() - 0.5) * CELL * 0.6;
     const z = cz * CELL + (rand() - 0.5) * CELL * 0.6;
     const y = (rand() - 0.5) * 9;
-    const r = 4 + rand() * 5;
+    const r = isWonder ? 9 + rand() * 2 : 4 + rand() * 5;
     const isl = makeIsland(x, y, z, r, biomeFor(x, z), rand);
+    if (isWonder && i === 0) { makeWonder(isl, rand); isl.key = cx + ',' + cz; }
     decorate(isl, rand);
     list.push(isl);
   }
@@ -561,7 +604,12 @@ function befriend(slime) {
   slime.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) o.material.dispose(); });
   const pet = makePet(color, 1);
   heartBurst(pet.g.position); chime(1240);
-  say(pet.name + ' is your friend now!');
+  if (slime.shiny) {
+    progress.shinies = (progress.shinies || 0) + 1;
+    say('A SHINY slime! ' + pet.name + ' joins you — journal updated!');
+  } else {
+    say(pet.name + ' is your friend now!');
+  }
   savePets(); updateBuddyHud();
 }
 
@@ -698,7 +746,7 @@ function clearBuilds() {
 
 function applyServerProgress(p) {
   if (!p || typeof p !== 'object') return;
-  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [] }, p);
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null } }, p);
   for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
   clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name);
   clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
@@ -740,13 +788,138 @@ fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => {
   }
 }).catch(() => renderAccountBar(null));
 
+// ---------- first-run tutorial tips (each shows once, ever) ----------
+function tip(key, text) {
+  if (settings.tut[key]) return;
+  settings.tut[key] = true; saveSettings();
+  say(text);
+}
+
+// ---------- Journal / Codex ----------
+function openJournal() {
+  const el = $('journal'); if (!el) return;
+  $('jBiomes').textContent = progress.biomes.length + ' / ' + BIOMES.length;
+  $('jBuddies').textContent = pets.length;
+  $('jShiny').textContent = progress.shinies || 0;
+  $('jPetal').textContent = progress.treasures || 0;
+  $('jWonder').textContent = (progress.wonders || []).length;
+  $('jBops').textContent = progress.bops || 0;
+  $('jBuilds').textContent = (progress.builds || []).length;
+  $('jQuests').textContent = Math.min(progress.quest.i, QUESTS.length) + ' / ' + QUESTS.length;
+  el.classList.add('on');
+}
+function closeJournal() { const el = $('journal'); if (el) el.classList.remove('on'); }
+const journalBtn = $('journalBtn');
+if (journalBtn) journalBtn.addEventListener('click', openJournal);
+const journalClose = $('journalClose');
+if (journalClose) journalClose.addEventListener('click', closeJournal);
+
+// ---------- Skykeeper NPC + quest chain ----------
+const skykeeper = new THREE.Group();
+{
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.7, 12),
+    new THREE.MeshToonMaterial({ color: 0xe8f2ff }));
+  robe.position.y = 0.85; robe.castShadow = true; skykeeper.add(robe);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 12),
+    new THREE.MeshToonMaterial({ color: 0xffe8d0 }));
+  head.position.y = 1.95; skykeeper.add(head);
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 8, 20),
+    new THREE.MeshBasicMaterial({ color: 0xfff2a0 }));
+  halo.rotation.x = Math.PI / 2; halo.position.y = 2.5; skykeeper.add(halo);
+  skykeeper.add(new THREE.PointLight(0xfff2c0, 0.8, 8));
+  skykeeper.position.set(5, 0, -5);
+  scene.add(skykeeper);
+}
+
+function qSnapshot() {
+  return {
+    sparks: progress.sparks, pets: pets.length, bops: progress.bops || 0,
+    builds: (progress.builds || []).length, biomes: progress.biomes.length,
+    treasures: progress.treasures || 0
+  };
+}
+const QUESTS = [
+  { give: 'The islands are drifting apart… sparks hold them together! Gather 10 sparks for me.',
+    done: 'Wonderful! The isles feel steadier already.', reward: 10,
+    prog: b => Math.min(10, progress.sparks - b.sparks) + '/10 sparks',
+    ok: b => progress.sparks - b.sparks >= 10 },
+  { give: 'Slimes are lonely little things. Make friends with one — just stand close and be kind.',
+    done: 'A new friendship! The sky sings for you.', reward: 10,
+    prog: b => Math.min(1, pets.length - b.pets) + '/1 buddy',
+    ok: b => pets.length - b.pets >= 1 },
+  { give: 'Some slimes love a playful bop — it makes them giggle! Bop 3 of them.',
+    done: 'Hee hee! They loved it.', reward: 10,
+    prog: b => Math.min(3, (progress.bops || 0) - b.bops) + '/3 bops',
+    ok: b => (progress.bops || 0) - b.bops >= 3 },
+  { give: 'Make the isles beautiful again — place 3 decorations anywhere you like. Press B to build!',
+    done: 'Oh, how lovely! You have a gardener\'s heart, like Miru.', reward: 10,
+    prog: b => Math.min(3, (progress.builds || []).length - b.builds) + '/3 placed',
+    ok: b => (progress.builds || []).length - b.builds >= 3 },
+  { give: 'Far from here the land changes color. Travel until you discover a new region!',
+    done: 'You crossed the sky! Few gardeners wander so far.', reward: 15,
+    prog: b => Math.min(1, progress.biomes.length - b.biomes) + '/1 region',
+    ok: b => progress.biomes.length - b.biomes >= 1 },
+  { give: 'One last thing… legends speak of glowing moonpetals. Find one and the isles will bloom!',
+    done: 'A moonpetal! You did it — you are a true Sky Explorer! Come back any time, little gardener.', reward: 25,
+    prog: b => Math.min(1, (progress.treasures || 0) - b.treasures) + '/1 moonpetal',
+    ok: b => (progress.treasures || 0) - b.treasures >= 1 },
+];
+
+function showDialog(text) {
+  const d = $('dialog'); if (!d) { say(text); return; }
+  $('dlgText').textContent = text;
+  d.classList.add('on');
+}
+const dlgBtn = $('dlgBtn');
+if (dlgBtn) dlgBtn.addEventListener('click', () => $('dialog').classList.remove('on'));
+
+function questLine() {
+  const q = progress.quest;
+  if (q.i >= QUESTS.length) return 'All done — Sky Explorer!';
+  if (!q.base) return 'Talk to the Skykeeper ✦';
+  const Q = QUESTS[q.i];
+  return Q.ok(q.base) ? 'Return to the Skykeeper ✦' : Q.prog(q.base);
+}
+let lastQLine = '';
+function refreshQuestHud() {
+  const s = questLine();
+  if (s === lastQLine) return;
+  lastQLine = s;
+  const el = $('qLine'); if (el) el.textContent = s;
+}
+
+function talkSkykeeper() {
+  const q = progress.quest;
+  if (q.i >= QUESTS.length) { showDialog('The isles bloom because of you. Play as long as you like, Sky Explorer!'); return; }
+  const Q = QUESTS[q.i];
+  if (!q.base) {
+    q.base = qSnapshot();
+    showDialog(Q.give);
+  } else if (Q.ok(q.base)) {
+    showDialog(Q.done + ' (+' + Q.reward + ' sparks)');
+    q.i++; q.base = null;
+    addSparks(Q.reward);
+    burst(skykeeper.position.clone().add(new THREE.Vector3(0, 2, 0)), 0xfff2a0, 24);
+    chime(1320);
+  } else {
+    showDialog(Q.give + ' (' + Q.prog(q.base) + ')');
+  }
+  saveProgress(); refreshQuestHud();
+}
+let interactPressed = false;
+const talkBtn = $('talkBtn');
+if (talkBtn) talkBtn.addEventListener('click', () => { interactPressed = true; });
+refreshQuestHud();
+
 // ---------- input ----------
 const keys = {};
 let jumpPressed = false, punchPressed = false;
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') { jumpPressed = true; e.preventDefault(); }
-  if (e.code === 'KeyF' || e.code === 'KeyE') punchPressed = true;
+  if (e.code === 'KeyF') punchPressed = true;
+  if (e.code === 'KeyE') interactPressed = true;
+  if (e.code === 'KeyJ') { const j = $('journal'); if (j && j.classList.contains('on')) closeJournal(); else openJournal(); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
@@ -886,7 +1059,12 @@ function bindSetting(id, apply) {
   if (sens) sens.value = settings.sensitivity;
   const inv = $('setInvert');
   if (inv) { inv.checked = settings.invert; inv.addEventListener('change', () => { settings.invert = inv.checked; saveSettings(); }); }
+  const con = $('setContrast');
+  if (con) { con.checked = settings.contrast; con.addEventListener('change', () => { settings.contrast = con.checked; applyA11y(); saveSettings(); }); }
+  const big = $('setBigText');
+  if (big) { big.checked = settings.bigText; big.addEventListener('change', () => { settings.bigText = big.checked; applyA11y(); saveSettings(); }); }
 }
+applyA11y();
 
 // "saved" micro-toast, used by the server sync
 let toastTimer;
@@ -912,7 +1090,8 @@ function doPunch(t) {
       s.alive = false; s.respawn = t + 6;
       burst(s.g.position, s.blob.material.color, 28);
       s.g.visible = false;
-      bops++;
+      progress.bops++; saveProgress();
+      const bops = progress.bops;
       const bopEl = $('cBop'); if (bopEl) bopEl.textContent = bops;
       chime(1040);
       say(['Boing! Got one!', 'Slime bopped!', 'Pow! It giggled away.'][bops % 3]);
@@ -1023,10 +1202,29 @@ function animate() {
     // stream new islands in / far ones out, and greet new biomes
     ensureChunks(player.position.x, player.position.z);
     checkBiome(player.position.x, player.position.z);
-    // ease sky + fog toward the current biome so each region feels distinct
+    // gentle day/night: 5-minute cycle, never darker than dusk (kid-safe)
+    const dayF = 0.66 + 0.34 * Math.sin(t * Math.PI * 2 / 300);
+    sun.intensity = 2.2 * dayF;
+    hemi.intensity = 0.55 + 0.35 * dayF;
+
+    // ease sky + fog toward the current biome (dimmed by time of day)
     const bh = biomeFor(player.position.x, player.position.z);
-    scene.background.lerp(skyTmp.setHex(bh.sky), dt * 0.8);
-    scene.fog.color.lerp(fogTmp.setHex(bh.fog), dt * 0.8);
+    scene.background.lerp(skyTmp.setHex(bh.sky).multiplyScalar(0.55 + 0.45 * dayF), dt * 0.8);
+    scene.fog.color.lerp(fogTmp.setHex(bh.fog).multiplyScalar(0.55 + 0.45 * dayF), dt * 0.8);
+
+    // wonder discovery: first visit to a Great Tree island
+    for (const isl of islands) {
+      if (!isl.wonder || isl.found) continue;
+      if (Math.hypot(player.position.x - isl.x, player.position.z - isl.z) < isl.r + 4) {
+        isl.found = true;
+        if (!progress.wonders.includes(isl.key)) {
+          progress.wonders.push(isl.key);
+          say('You found a Great Tree! Wonder #' + progress.wonders.length + '!');
+          chime(1180); burst(new THREE.Vector3(isl.x, isl.y + 9, isl.z), 0xbfffcf, 30);
+          saveProgress();
+        }
+      }
+    }
 
     // sparkle trail cosmetic (unlocked later)
     if (hasTrail && running && onGround) {
@@ -1126,11 +1324,39 @@ function animate() {
         burst(c.mesh.position, c.mesh.material.color);
         scene.remove(c.mesh);
         collect.splice(i, 1);
-        chime(c.kind === 'seed' ? 880 : c.kind === 'ring' ? 740 : 990);
+        if (c.kind === 'petal') {
+          progress.treasures = (progress.treasures || 0) + 1;
+          say('A moonpetal! Treasure #' + progress.treasures + ' for your journal!');
+          chime(1240);
+        } else {
+          chime(c.kind === 'seed' ? 880 : c.kind === 'ring' ? 740 : 990);
+        }
         if (navigator.vibrate) navigator.vibrate(12);
         addSparks(c.worth);
       }
     }
+
+    // Skykeeper: gentle float + talk when near
+    skykeeper.position.y = Math.sin(t * 1.4) * 0.15 + 0.05;
+    skykeeper.rotation.y = Math.sin(t * 0.5) * 0.3;
+    const dK = Math.hypot(player.position.x - skykeeper.position.x, player.position.z - skykeeper.position.z);
+    const nearK = dK < 3.2;
+    if (talkBtn) talkBtn.style.display = nearK ? 'flex' : 'none';
+    if (nearK) tip('keeper', isTouch ? 'Tap TALK to speak with the Skykeeper!' : 'Press E to talk to the Skykeeper!');
+    if (interactPressed && nearK) talkSkykeeper();
+    interactPressed = false;
+
+    // contextual first-run tips
+    if (progress.sparks >= 6) tip('build', 'Press B (or the Build button) to decorate your island!');
+    if (airTime > 0.7) tip('glide', 'Hold jump while falling to glide gently down!');
+    for (const s of slimes) {
+      if (!s.alive) continue;
+      if (Math.hypot(s.g.position.x - player.position.x, s.g.position.z - player.position.z) < 4.5) {
+        tip('slime', 'Stand close to a slime and stay kind — it will become your friend!');
+        break;
+      }
+    }
+    refreshQuestHud();
 
     // befriend: linger next to a wild slime (without punching) and it joins you
     if (punchTime < 0) {

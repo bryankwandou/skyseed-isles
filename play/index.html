@@ -61,6 +61,59 @@
     #stick { display:block; }
     #help { display:none; }
   }
+  /* accessibility modes */
+  body.hiContrast #hud, body.hiContrast #accountBar, body.hiContrast #msg {
+    background:#0e1524; color:#fff; box-shadow:0 0 0 2px #fff;
+  }
+  body.hiContrast #hud b { color:#ffe98a; }
+  body.bigText #hud { font-size:19px; }
+  body.bigText #msg { font-size:19px; }
+  body.bigText #help { font-size:16px; }
+  /* journal */
+  #journalBtn {
+    position:fixed; z-index:22; left:12px; top:164px; width:44px; height:44px;
+    border-radius:12px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
+    color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+  }
+  #journal {
+    position:fixed; inset:0; z-index:58; display:none; align-items:center; justify-content:center;
+    background:rgba(20,35,60,.45); backdrop-filter:blur(4px);
+  }
+  #journal.on { display:flex; }
+  #journalCard {
+    width:min(92vw,400px); background:#fffdf5; border-radius:20px; padding:22px;
+    color:var(--ink); box-shadow:0 18px 50px rgba(20,40,80,.35);
+  }
+  #journalCard h2 { font-size:20px; color:#1d3a5f; margin-bottom:12px; text-align:center; }
+  .jRow { display:flex; justify-content:space-between; padding:7px 4px; font-size:15px; border-bottom:1px dashed #e2d9c8; }
+  .jRow b { font-variant-numeric:tabular-nums; }
+  #journalClose {
+    width:100%; margin-top:14px; border:none; cursor:pointer; color:#fff; font-weight:700; font-size:15px;
+    padding:11px; border-radius:12px; background:linear-gradient(135deg,#8fd0f5,#a06bf0);
+  }
+  /* dialog (Skykeeper) */
+  #dialog {
+    position:fixed; left:50%; bottom:110px; transform:translateX(-50%); z-index:40;
+    width:min(92vw,440px); display:none;
+  }
+  #dialog.on { display:block; }
+  #dlgCard {
+    background:rgba(255,255,255,.95); border-radius:16px; padding:16px 18px;
+    box-shadow:0 10px 32px rgba(20,40,80,.3); color:var(--ink);
+  }
+  #dlgName { font-weight:800; color:#a06bf0; font-size:13px; letter-spacing:1px; }
+  #dlgText { margin:6px 0 12px; font-size:15px; line-height:1.55; }
+  #dlgBtn {
+    border:none; cursor:pointer; color:#fff; font-weight:700; font-size:14px;
+    padding:9px 22px; border-radius:10px; background:linear-gradient(135deg,#ff8fb8,#a06bf0);
+  }
+  #talkBtn {
+    position:fixed; z-index:21; right:24px; bottom:210px; width:80px; height:52px;
+    border-radius:14px; border:2px solid rgba(255,255,255,.8); background:rgba(255,214,120,.65);
+    color:#5b3a10; font-size:15px; font-weight:800; display:none;
+    align-items:center; justify-content:center; user-select:none; touch-action:none; cursor:pointer;
+  }
   /* pause + settings */
   #pauseBtn {
     position:fixed; z-index:22; left:12px; top:110px; width:44px; height:44px;
@@ -147,6 +200,29 @@
   <p style="font-size:13px">WASD run · mouse look · Space jump · walk up to a slime to make a friend · B to build & decorate · F to bop · Esc for settings · everything is saved</p>
 </div>
 <button id="pauseBtn" aria-label="Pause and settings">⚙</button>
+<button id="journalBtn" aria-label="Journal">📖</button>
+<button id="talkBtn" aria-label="Talk to the Skykeeper">TALK</button>
+<div id="journal" role="dialog" aria-label="Journal">
+  <div id="journalCard">
+    <h2>Sky Journal</h2>
+    <div class="jRow"><span>Regions discovered</span><b id="jBiomes">0</b></div>
+    <div class="jRow"><span>Buddies</span><b id="jBuddies">0</b></div>
+    <div class="jRow"><span>Shiny slimes befriended</span><b id="jShiny">0</b></div>
+    <div class="jRow"><span>Moonpetals found</span><b id="jPetal">0</b></div>
+    <div class="jRow"><span>Great Trees visited</span><b id="jWonder">0</b></div>
+    <div class="jRow"><span>Slimes bopped</span><b id="jBops">0</b></div>
+    <div class="jRow"><span>Decorations placed</span><b id="jBuilds">0</b></div>
+    <div class="jRow"><span>Skykeeper quests</span><b id="jQuests">0</b></div>
+    <button id="journalClose">Close (J)</button>
+  </div>
+</div>
+<div id="dialog" role="dialog" aria-label="Skykeeper dialog">
+  <div id="dlgCard">
+    <div id="dlgName">✦ THE SKYKEEPER</div>
+    <div id="dlgText"></div>
+    <button id="dlgBtn">Okay!</button>
+  </div>
+</div>
 <div id="pauseMenu" role="dialog" aria-label="Settings">
   <div id="pauseCard">
     <h2>Paused</h2>
@@ -157,6 +233,8 @@
     </div>
     <div class="setRow"><label for="setSens">Camera speed</label><input id="setSens" type="range" min="0.4" max="2" step="0.1" /></div>
     <div class="setRow"><label for="setInvert">Invert look</label><input id="setInvert" type="checkbox" /></div>
+    <div class="setRow"><label for="setContrast">High contrast</label><input id="setContrast" type="checkbox" /></div>
+    <div class="setRow"><label for="setBigText">Bigger text</label><input id="setBigText" type="checkbox" /></div>
     <button id="resumeBtn">Back to playing</button>
     <div id="pauseLinks"><a href="./account.html">Account</a><a href="../index.html">Home</a></div>
   </div>
@@ -166,7 +244,8 @@
   Sparks <b id="cSpark">0</b><br>
   Next: <b id="nextGoal">—</b> in <b id="nextIn">—</b><br>
   Buddies <b id="cBuddy">none yet</b><br>
-  Slimes bopped <b id="cBop">0</b>
+  Slimes bopped <b id="cBop">0</b><br>
+  Quest: <b id="qLine">Talk to the Skykeeper ✦</b>
 </div>
 <div id="accountBar">…</div>
 <div id="msg"></div>
