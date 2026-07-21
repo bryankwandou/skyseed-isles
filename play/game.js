@@ -656,10 +656,29 @@ function makeBuildMesh(type) {
     const glow = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd98a }));
     glow.position.y = 1.15; g.add(glow);
     glow.add(new THREE.PointLight(0xffcf7a, 0.7, 6));
-  } else { // crystal
+  } else if (type === 'crystal') {
     const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), new THREE.MeshToonMaterial({ color: 0x8fd0ff }));
     cr.position.y = 0.55; cr.castShadow = true; g.add(cr);
     cr.add(new THREE.PointLight(0x8fd0ff, 0.5, 5));
+  } else if (type === 'fence') {
+    const rail = new THREE.MeshToonMaterial({ color: 0xb98a5a });
+    [-0.45, 0.45].forEach(x => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.8, 0.12), rail); p.position.set(x, 0.4, 0); p.castShadow = true; g.add(p); });
+    [0.28, 0.55].forEach(y => { const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.08), rail); b.position.set(0, y, 0); g.add(b); });
+  } else if (type === 'bench') {
+    const wood = new THREE.MeshToonMaterial({ color: 0xc98f5a });
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.45), wood); seat.position.y = 0.45; seat.castShadow = true; g.add(seat);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.1), wood); back.position.set(0, 0.7, -0.18); g.add(back);
+    [-0.5, 0.5].forEach(x => { const l = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.12), wood); l.position.set(x, 0.22, 0); g.add(l); });
+  } else if (type === 'arch') {
+    const stone = new THREE.MeshToonMaterial({ color: 0xd8c8e8 });
+    [-0.7, 0.7].forEach(x => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 1.8, 8), stone); p.position.set(x, 0.9, 0); p.castShadow = true; g.add(p); });
+    const top = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.16, 8, 16, Math.PI), stone); top.position.y = 1.8; top.castShadow = true; g.add(top);
+  } else { // path
+    const stone = new THREE.MeshToonMaterial({ color: 0xbfc6cf });
+    for (let i = 0; i < 3; i++) {
+      const s = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.08, 7), stone);
+      s.position.set((i - 1) * 0.5, 0.04, 0); g.add(s);
+    }
   }
   return g;
 }
@@ -667,9 +686,12 @@ function makeBuildMesh(type) {
 function spawnBuild(b) {
   const g = makeBuildMesh(b.type);
   g.position.set(b.x, b.y, b.z);
+  if (b.rot) g.rotation.y = b.rot;
   scene.add(g);
   buildMeshes.push(g);
 }
+
+let buildRot = 0; // current placement rotation, cycled with R
 
 function targetBuildPoint() {
   const fwd = new THREE.Vector3(Math.sin(body.rotation.y), 0, Math.cos(body.rotation.y));
@@ -686,7 +708,7 @@ ghost.rotation.x = Math.PI / 2; ghost.visible = false; scene.add(ghost);
 function placeBuild() {
   const tp = targetBuildPoint();
   if (!tp) { say('Face an island to build there.'); return; }
-  const b = { x: +tp.x.toFixed(2), y: +tp.y.toFixed(2), z: +tp.z.toFixed(2), type: buildType };
+  const b = { x: +tp.x.toFixed(2), y: +tp.y.toFixed(2), z: +tp.z.toFixed(2), type: buildType, rot: +buildRot.toFixed(3) };
   spawnBuild(b);
   if (!Array.isArray(progress.builds)) progress.builds = [];
   progress.builds.push(b); saveProgress();
@@ -725,9 +747,13 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyB') toggleBuild();
   if (!buildMode) return;
   if (e.code === 'KeyU') undoBuild();
-  const n = { Digit1: 'tree', Digit2: 'flower', Digit3: 'mushroom', Digit4: 'lantern', Digit5: 'crystal' }[e.code];
+  if (e.code === 'KeyR') { buildRot = (buildRot + Math.PI / 8) % (Math.PI * 2); ghost.rotation.z = -buildRot; chime(600); }
+  const n = { Digit1: 'tree', Digit2: 'flower', Digit3: 'mushroom', Digit4: 'lantern', Digit5: 'crystal',
+              Digit6: 'fence', Digit7: 'bench', Digit8: 'arch', Digit9: 'path' }[e.code];
   if (n) setBuildType(n);
 });
+const rotateBtn = $('rotateBtn');
+if (rotateBtn) rotateBtn.addEventListener('click', () => { buildRot = (buildRot + Math.PI / 8) % (Math.PI * 2); ghost.rotation.z = -buildRot; chime(600); });
 
 // restore everything the child built in a past session
 if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
@@ -911,6 +937,34 @@ const talkBtn = $('talkBtn');
 if (talkBtn) talkBtn.addEventListener('click', () => { interactPressed = true; });
 refreshQuestHud();
 
+// ---------- buddy care: pet the nearest buddy to raise happiness & grant XP ----------
+let petPressed = false;
+const CARE_NAMES = ['giggled', 'did a happy wiggle', 'bounced with joy', 'glowed brighter', 'nuzzled you'];
+function careForBuddy() {
+  if (!pets.length) { say('Make a slime friend first — walk up to one!'); return; }
+  // nearest buddy to the player
+  let best = null, bd = 3.5;
+  for (const p of pets) {
+    const d = Math.hypot(p.g.position.x - player.position.x, p.g.position.z - player.position.z);
+    if (d < bd) { bd = d; best = p; }
+  }
+  if (!best) best = pets[0];
+  heartBurst(best.g.position);
+  best.careBounce = 1; // animation impulse
+  chime(1040);
+  if (navigator.vibrate) navigator.vibrate(10);
+  grantPetXp(2); // petting helps them grow
+  say(best.name + ' ' + CARE_NAMES[Math.floor(Math.random() * CARE_NAMES.length)] + '! ♥');
+  tip('care', 'Petting your buddies makes them happy and helps them grow!');
+}
+const careBtn = $('careBtn');
+if (careBtn) careBtn.addEventListener('click', careForBuddy);
+
+// ---------- PWA: register the service worker (installable app) ----------
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('./sw.js').catch(() => { /* optional */ });
+}
+
 // ---------- input ----------
 const keys = {};
 let jumpPressed = false, punchPressed = false;
@@ -919,6 +973,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { jumpPressed = true; e.preventDefault(); }
   if (e.code === 'KeyF') punchPressed = true;
   if (e.code === 'KeyE') interactPressed = true;
+  if (e.code === 'KeyP') petPressed = true;
   if (e.code === 'KeyJ') { const j = $('journal'); if (j && j.classList.contains('on')) closeJournal(); else openJournal(); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
@@ -1343,8 +1398,9 @@ function animate() {
     const nearK = dK < 3.2;
     if (talkBtn) talkBtn.style.display = nearK ? 'flex' : 'none';
     if (nearK) tip('keeper', isTouch ? 'Tap TALK to speak with the Skykeeper!' : 'Press E to talk to the Skykeeper!');
-    if (interactPressed && nearK) talkSkykeeper();
+    if (interactPressed) { if (nearK) talkSkykeeper(); else careForBuddy(); }
     interactPressed = false;
+    if (petPressed) { careForBuddy(); petPressed = false; }
 
     // contextual first-run tips
     if (progress.sparks >= 6) tip('build', 'Press B (or the Build button) to decorate your island!');
@@ -1391,7 +1447,8 @@ function animate() {
       const gh = groundHeight(p.g.position.x, p.g.position.z);
       const baseY = (gh > -Infinity ? gh : target.y) + 0.4;
       const hop = Math.abs(Math.sin(t * 4 + p.phase));
-      p.g.position.y = baseY + hop * 0.35;
+      if (p.careBounce > 0) p.careBounce = Math.max(0, p.careBounce - dt * 2);
+      p.g.position.y = baseY + hop * 0.35 + (p.careBounce || 0) * 0.5;
       p.g.scale.setScalar(1 + (p.level - 1) * 0.11);
       p.blob.scale.set(1 + (1 - hop) * 0.12, 0.82 - (1 - hop) * 0.12, 1 + (1 - hop) * 0.12);
       const dx = target.x - p.g.position.x, dz = target.z - p.g.position.z;

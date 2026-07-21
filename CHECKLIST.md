@@ -213,8 +213,15 @@ Legend: `[x]` done + verified · `[ ]` open · `[~]` in progress · `[!]` blocke
 - [x] P3: RPG dialog panel + quest tracker line in HUD + TALK button (touch) / E key (desktop)
 - [x] Bops now persisted in progress (survives reload/server sync)
 
-## 8. Next up
-- [ ] P2: buddy care (feed/pet), cosmetic wardrobe
-- [ ] P4: build 2.0 (rotate, more pieces)
-- [ ] P5: family dashboard for the 12 kids
-- [ ] P6: PWA + Google sign-in
+## 8. Phase 2/4/5/6 slice (this pass)
+- [x] P2: Buddy care — pet your buddies (♥ Pet button / P key / E away from Skykeeper): hearts, bounce animation, +2 XP, haptic, one-time tip
+- [x] P4: Build 2.0 — R key / ↻ Rotate button (22.5° steps, rotation saved per piece), 4 new pieces: Fence, Bench, Arch, Path (9 total, number keys 1–9)
+- [x] P5: Family dashboard — /api/family (admin-only, admin re-verified against DB) + family.html: per-child sparks/buddies/builds/quests/regions/last-played, family totals, double-confirm delete, parent accounts protected
+- [x] P6: PWA — manifest.webmanifest + service worker (network-first shell cache, API never cached, GET only) + theme/apple meta tags → installable on phones
+- [x] E key is context-aware: talk to the Skykeeper when near, pet a buddy otherwise
+
+## 9. Next up
+- [ ] Cosmetic wardrobe for Miru
+- [ ] Google sign-in
+- [ ] Password reset via email
+- [ ] Compressed VRM for faster first load
