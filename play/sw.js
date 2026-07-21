@@ -1,6 +1,7 @@
 // Skyseed Isles service worker — cache the shell, never cache the API.
-const CACHE = 'skyseed-v1';
-const SHELL = ['./', './index.html', './game.js', './account.html', './account.js', './manifest.webmanifest'];
+const CACHE = 'skyseed-v2';
+const SHELL = ['./', './index.html', './game.js', './account.html', './account.js',
+  './family.html', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
