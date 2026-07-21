@@ -13,24 +13,38 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 
 ---
 
-## 🔴 Critical — fix before the kids get accounts
+## 🔴 Critical — status
 
-1. **~~Guest progress destroyed on sign-up~~ — FIXED & VERIFIED this pass.**
+1. ✅ **~~Guest progress destroyed on sign-up~~ — FIXED & VERIFIED.**
    Proven on production: a guest with 240 sparks / 2 buddies / 2 builds / 4 quests was reset to
    zero on account creation. Now the richer save always wins and is carried up to the server.
-2. **The 12 child accounts do not exist yet.** The database holds exactly one account (the parent).
-   Nothing has been handed to any child.
-3. **The whole game is in English; the children are Indonesian.** Zero Indonesian strings in the
-   code. A 6-year-old cannot read "Feather Glide — hold jump while falling to float!". This is the
-   single biggest barrier between the current build and a child actually enjoying it.
-4. **No recovery for the parent account.** If you forget the parent password, nobody can reset it —
-   there is no email flow and the parent is the only one who can reset others. Total lockout.
-5. **No rate limiting on `/api/login`.** Unlimited password guesses against a real account.
-6. **Two devices overwrite each other.** The score-based merge now prevents *catastrophic* loss, but
-   a child who builds on a tablet and then plays on a phone can still lose the smaller session's
-   work. Needs real per-field merge or a timestamp + "keep which?" prompt.
-7. **No tests in the repository.** Every test written this project lives in a scratch folder outside
-   git. Nothing stops a future change from silently re-breaking any verified feature.
+   Re-verified after the fix: all 240/2/2/4 survived.
+2. ✅ **~~The whole game is in English~~ — FIXED & VERIFIED.**
+   Full Bahasa Indonesia translation, and it is now the **default**. Every HUD label, menu, button,
+   journal row, wardrobe item, tutorial tip, quest line and Skykeeper dialogue. A language toggle
+   sits in the pause menu for English. Verified headless: `Mulai Petualangan`, `Kilau`, `Teman`,
+   `Jurnal Langit`, `Lemari Baju Miru`, and a clean round-trip back to English.
+3. ✅ **~~No parent-driven child account creation~~ — FIXED & VERIFIED.**
+   "Add a child" on the family dashboard. Children never type an email — a placeholder is minted
+   server-side. Verified on production: parent created a child, child logged in successfully.
+   *(The 12 real accounts still need to be created by you — one minute of typing, see below.)*
+4. ✅ **~~No recovery for the parent account~~ — FIXED.**
+   `npm run reset-parent` with `NEW_PASSWORD` in the environment. Requires database access, which
+   only the parent has. No email provider needed.
+5. ✅ **~~No rate limiting on `/api/login`~~ — FIXED & VERIFIED.**
+   8 wrong tries per IP+username, then a 10-minute cool-off. Verified live: `401 ×8` then `429 ×2`.
+   Honest limitation: the counter is per serverless instance, so it is a speed bump against online
+   guessing, not a hard lockout. A shared store (Redis/Postgres) would be needed for that.
+6. ✅ **~~No tests in the repository~~ — FIXED.**
+   Four end-to-end suites now live in `test/`, each documented with the real bug it caught, plus a
+   GitHub Actions workflow that syntax-checks everything and fails the build if a secret is committed.
+7. 🔴 **Still open — you must create the 12 child accounts.** The database holds one account.
+   Use the family dashboard → "Add a child". Nothing is handed to any child until you do.
+8. 🔴 **Still open — the Neon database password has not been rotated.** It was pasted into a chat.
+   Only you can do this: Neon Console → Reset password → update `DATABASE_URL` in Vercel.
+9. 🟠 **Still open — two devices can still overwrite each other.** The score-based merge prevents
+   *catastrophic* loss, but a child who builds on a tablet then plays on a phone can lose the
+   smaller session. Needs per-field merge or a timestamp + "keep which?" prompt.
 
 ## 🟠 Important — real gaps in the experience
 
@@ -139,14 +153,25 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 
 ---
 
+## Scoreboard
+
+- **Closed this pass:** 6 of the 7 critical items (guest data loss, Indonesian, parent-created child
+  accounts, parent recovery, rate limiting, tests + CI). Also #40 (children no longer type an email)
+  and #44 (login backoff).
+- **Still open:** ~84 items, of which **2 need you rather than me**: create the 12 child accounts,
+  and rotate the Neon password.
+
 ## Suggested order of work
 
-**Next (highest value per hour):**
-1. Indonesian translation (#3) — unlocks the game for the actual players.
-2. Create the 12 child accounts properly, parent-driven, no child emails (#2, #40).
-3. Parent account recovery (#4) + login rate limiting (#5, #44).
-4. Commit the test suite and wire CI (#7, #86).
-5. Rotate the leaked database password (#45) — needs you, not me.
+**Needs you (5 minutes):**
+1. Family dashboard → "Add a child" × 12.
+2. Neon Console → reset the database password → update `DATABASE_URL` in Vercel.
 
-**Then:** buddy naming + feeding (#12, #13), map/compass (#18), photo mode (#29),
-per-field save merge (#6), real Terms/Privacy pages (#38).
+**Next up for me, highest value first:**
+1. Translate the account, family-dashboard and landing pages (still English) — the parent-facing
+   surfaces, and the child sign-in screen a 6-year-old sees first.
+2. Buddy naming + feeding (#12, #13) — naming a pet is the strongest attachment lever we are missing.
+3. Map / compass (#18) — children currently get lost in an endless world with no way to orient.
+4. Real Terms & Privacy pages instead of `alert()` popups (#38).
+5. Per-field save merge (#9) to close the last data-loss path.
+6. Photo mode (#29) — the sharing hook siblings will actually use.
