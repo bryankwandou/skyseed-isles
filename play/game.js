@@ -867,12 +867,31 @@ function renderAccountBar(u) {
   }
 }
 
+// How much play a save represents. Used so the smaller save can never silently
+// erase the bigger one — a child who plays as a guest and then signs up keeps everything.
+function progressScore(p) {
+  if (!p || typeof p !== 'object') return -1;
+  return (p.sparks || 0)
+    + (Array.isArray(p.builds) ? p.builds.length : 0) * 3
+    + (Array.isArray(p.pets) ? p.pets.length : 0) * 10
+    + (Array.isArray(p.biomes) ? p.biomes.length : 0) * 15
+    + ((p.quest && p.quest.i) || 0) * 25
+    + (p.treasures || 0) * 10;
+}
+
 fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => {
   if (u && u.username) {
     serverUser = u.username;
-    applyServerProgress(u.progress);
+    const mine = progressScore(progress), theirs = progressScore(u.progress);
+    if (theirs >= mine) {
+      applyServerProgress(u.progress);
+      say('Welcome back, ' + u.username + '!');
+    } else {
+      // this device is ahead (e.g. played as a guest, then signed up) — carry it up
+      saveProgress();
+      say('Welcome, ' + u.username + '! Your progress came with you.');
+    }
     renderAccountBar(u);
-    say('Welcome back, ' + u.username + '!');
   } else {
     renderAccountBar(null);
   }
