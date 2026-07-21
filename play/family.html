@@ -74,6 +74,15 @@
       <button type="submit" id="addBtn">Create account</button>
       <span id="addMsg"></span>
     </form>
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brand)">Add several children at once</summary>
+      <p class="sub" style="margin:8px 0">One child per line, as <code>username password</code>. Example:<br>
+        <code>budi Rahasia123</code><br><code>siti Bintang456</code></p>
+      <textarea id="bulkBox" rows="6" placeholder="budi Rahasia123&#10;siti Bintang456"
+        style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px"></textarea>
+      <button id="bulkBtn" style="margin-top:8px;border:none;cursor:pointer;color:#fff;font-weight:700;font-size:14px;padding:10px 18px;border-radius:10px;background:linear-gradient(135deg,#8fd0f5,#a06bf0)">Create all</button>
+      <div id="bulkMsg" style="margin-top:8px;font-size:13px;white-space:pre-line"></div>
+    </details>
   </div>
   <div id="content"></div>
   <div class="foot"><a href="./index.html">← Back to the game</a> · <a href="./account.html">Account</a></div>
@@ -159,6 +168,27 @@ $('addForm').addEventListener('submit', async e => {
   if (!r.ok) { msg.className = 'err'; msg.textContent = d.error || 'Could not create the account.'; return; }
   msg.className = 'ok'; msg.textContent = 'Created "' + d.username + '".';
   $('ch_user').value = ''; $('ch_pass').value = '';
+  load();
+});
+
+// Bulk add — paste all twelve children at once.
+$('bulkBtn').addEventListener('click', async () => {
+  const lines = $('bulkBox').value.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) { $('bulkMsg').textContent = 'Nothing to add yet.'; return; }
+  const btn = $('bulkBtn'); btn.disabled = true;
+  const out = [];
+  for (const line of lines) {
+    const [username, password] = line.split(/\s+/);
+    if (!username || !password) { out.push('✗ ' + line + ' — needs a username and a password'); continue; }
+    const r = await fetch('/api/family', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const d = await r.json().catch(() => ({}));
+    out.push(r.ok ? '✓ ' + username + ' created' : '✗ ' + username + ' — ' + (d.error || 'failed'));
+    $('bulkMsg').textContent = out.join('\n');
+  }
+  btn.disabled = false;
   load();
 });
 
