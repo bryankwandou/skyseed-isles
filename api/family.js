@@ -1,4 +1,4 @@
-import { sql, getSession, readJson } from './_lib.mjs';
+import { sql, bcrypt, getSession, readJson } from './_lib.mjs';
 
 // Parent dashboard API — admin only.
 export default async function handler(req, res) {
@@ -21,6 +21,23 @@ export default async function handler(req, res) {
                COALESCE((progress->>'bops')::int, 0)                      AS bops
         FROM users ORDER BY is_admin DESC, username ASC`;
       return res.status(200).json({ users: rows });
+    }
+
+    // Parent-managed password reset — children have no email, so the parent sets it.
+    if (req.method === 'PATCH' || req.method === 'POST') {
+      const { id, password } = readJson(req);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+      if (typeof password !== 'string' || password.length < 8) {
+        return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+      }
+      const target = (await sql`SELECT id, is_admin FROM users WHERE id = ${id} LIMIT 1`)[0];
+      if (!target) return res.status(404).json({ error: 'Account not found' });
+      if (target.is_admin && target.id !== me.id) {
+        return res.status(400).json({ error: 'Cannot change another parent\'s password.' });
+      }
+      const hash = await bcrypt.hash(password, 10);
+      await sql`UPDATE users SET password_hash = ${hash}, updated_at = now() WHERE id = ${id}`;
+      return res.status(200).json({ ok: true });
     }
 
     if (req.method === 'DELETE') {

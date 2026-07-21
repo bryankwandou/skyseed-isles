@@ -93,10 +93,38 @@
   #journalCard h2 { font-size:20px; color:#1d3a5f; margin-bottom:12px; text-align:center; }
   .jRow { display:flex; justify-content:space-between; padding:7px 4px; font-size:15px; border-bottom:1px dashed #e2d9c8; }
   .jRow b { font-variant-numeric:tabular-nums; }
-  #journalClose {
+  #journalClose, #wardrobeClose {
     width:100%; margin-top:14px; border:none; cursor:pointer; color:#fff; font-weight:700; font-size:15px;
     padding:11px; border-radius:12px; background:linear-gradient(135deg,#8fd0f5,#a06bf0);
   }
+  /* wardrobe */
+  #wardrobeBtn {
+    position:fixed; z-index:22; left:12px; top:218px; width:44px; height:44px;
+    border-radius:12px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
+    color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+  }
+  #wardrobe {
+    position:fixed; inset:0; z-index:58; display:none; align-items:center; justify-content:center;
+    background:rgba(20,35,60,.45); backdrop-filter:blur(4px);
+  }
+  #wardrobe.on { display:flex; }
+  #wardrobeCard {
+    width:min(92vw,400px); background:#fffdf5; border-radius:20px; padding:22px;
+    color:var(--ink); box-shadow:0 18px 50px rgba(20,40,80,.35);
+  }
+  #wardrobeCard h2 { font-size:20px; color:#1d3a5f; margin-bottom:6px; text-align:center; }
+  #wardrobeCard p.sub { font-size:12.5px; color:#5b6b82; text-align:center; margin-bottom:12px; }
+  #wardrobeCard h3 { font-size:13px; color:#5b6b82; text-transform:uppercase; letter-spacing:.5px; margin:12px 0 7px; }
+  .wrBox { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+  .wrItem {
+    min-height:40px; padding:9px 14px; border-radius:11px; border:2px solid transparent;
+    background:#eef4fb; color:#1d2433; font-weight:700; font-size:13.5px; cursor:pointer;
+  }
+  .wrItem.sel { border-color:#ff7ab0; background:#fff; }
+  .wrItem.locked { opacity:.5; cursor:not-allowed; background:#e8edf3; }
+  .wrItem:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
+  .wrReq { font-size:11.5px; color:#9aa8ba; width:100%; margin:-2px 0 4px 4px; }
   /* dialog (Skykeeper) */
   #dialog {
     position:fixed; left:50%; bottom:110px; transform:translateX(-50%); z-index:40;
@@ -212,6 +240,18 @@
 </div>
 <button id="pauseBtn" aria-label="Pause and settings">⚙</button>
 <button id="journalBtn" aria-label="Journal">📖</button>
+<button id="wardrobeBtn" aria-label="Wardrobe">👒</button>
+<div id="wardrobe" role="dialog" aria-label="Wardrobe">
+  <div id="wardrobeCard">
+    <h2>Miru's Wardrobe</h2>
+    <p class="sub">Everything here is earned by exploring — never bought.</p>
+    <h3>Hat</h3>
+    <div class="wrBox" id="wr_hat"></div>
+    <h3>Cape</h3>
+    <div class="wrBox" id="wr_cape"></div>
+    <button id="wardrobeClose">Close (K)</button>
+  </div>
+</div>
 <button id="talkBtn" aria-label="Talk to the Skykeeper">TALK</button>
 <div id="journal" role="dialog" aria-label="Journal">
   <div id="journalCard">

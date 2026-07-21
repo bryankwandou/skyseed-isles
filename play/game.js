@@ -198,11 +198,13 @@ let vrm = null, vrmBones = null;
       lLeg: h.getNormalizedBoneNode('leftUpperLeg'),
       rLeg: h.getNormalizedBoneNode('rightUpperLeg'),
       spine: h.getNormalizedBoneNode('spine'),
-      neck: h.getNormalizedBoneNode('neck')
+      neck: h.getNormalizedBoneNode('neck'),
+      head: h.getNormalizedBoneNode('head')
     };
     if (vrmBones.lArm) vrmBones.lArm.rotation.z = 1.15;
     if (vrmBones.rArm) vrmBones.rArm.rotation.z = -1.15;
     const lb = $('loadBar'); if (lb) lb.parentElement.style.display = 'none';
+    applyWardrobe(); // re-attach outfit to the real bones
     say('Miru has arrived!');
   }, xhr => {
     // loading progress bar on the title screen while the avatar streams in
@@ -401,7 +403,7 @@ const UNLOCKS = [
 ];
 
 const SAVE_KEY = 'skyseed_save_v1';
-let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null } };
+let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none' } };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
@@ -772,10 +774,11 @@ function clearBuilds() {
 
 function applyServerProgress(p) {
   if (!p || typeof p !== 'object') return;
-  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null } }, p);
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none' } }, p);
   for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
   clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name);
   clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
+  applyWardrobe();
   refreshGoal(); updateBuddyHud();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
 }
@@ -960,6 +963,127 @@ function careForBuddy() {
 const careBtn = $('careBtn');
 if (careBtn) careBtn.addEventListener('click', careForBuddy);
 
+// ---------- wardrobe: cosmetics earned by exploring (never bought) ----------
+const WARDROBE = {
+  hat: [
+    { id: 'none',   name: 'No hat',       need: () => true, req: '' },
+    { id: 'flower', name: 'Flower Crown', need: () => progress.sparks >= 20,               req: 'Collect 20 sparks' },
+    { id: 'star',   name: 'Star Hat',     need: () => (progress.wonders || []).length >= 1, req: 'Find a Great Tree' },
+    { id: 'party',  name: 'Party Hat',    need: () => (progress.quest?.i || 0) >= 3,        req: 'Finish 3 Skykeeper quests' }
+  ],
+  cape: [
+    { id: 'none', name: 'No cape',        need: () => true, req: '' },
+    { id: 'sky',  name: 'Sky Cape',       need: () => progress.biomes.length >= 2,          req: 'Discover 2 regions' },
+    { id: 'star', name: 'Starlight Cape', need: () => (progress.treasures || 0) >= 1,       req: 'Find a moonpetal' }
+  ]
+};
+
+function makeHat(id) {
+  const g = new THREE.Group();
+  if (id === 'flower') {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.05, 6, 16), new THREE.MeshToonMaterial({ color: 0x7fd86a }));
+    ring.rotation.x = Math.PI / 2; g.add(ring);
+    for (let i = 0; i < 6; i++) {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8),
+        new THREE.MeshToonMaterial({ color: [0xff8fc0, 0xffe08a, 0xffffff][i % 3] }));
+      const a = i / 6 * Math.PI * 2;
+      p.position.set(Math.cos(a) * 0.34, 0.03, Math.sin(a) * 0.34); g.add(p);
+    }
+  } else if (id === 'star') {
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 10), new THREE.MeshToonMaterial({ color: 0x6a7ae0 }));
+    cap.position.y = 0.25; g.add(cap);
+    const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }));
+    st.position.y = 0.58; g.add(st);
+    st.add(new THREE.PointLight(0xfff2a0, 0.5, 3));
+  } else { // party
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.55, 12), new THREE.MeshToonMaterial({ color: 0xff7ab0 }));
+    cone.position.y = 0.28; g.add(cone);
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), new THREE.MeshToonMaterial({ color: 0xfff2c0 }));
+    pom.position.y = 0.58; g.add(pom);
+  }
+  return g;
+}
+
+function makeCape(id) {
+  const g = new THREE.Group();
+  const col = id === 'sky' ? 0x8fd0f5 : 0x4a4f8f;
+  const cape = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5, 1.15, 12, 1, true, Math.PI * 0.25, Math.PI * 1.5),
+    new THREE.MeshToonMaterial({ color: col, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
+  );
+  cape.position.y = -0.42; g.add(cape);
+  if (id === 'star') {
+    for (let i = 0; i < 7; i++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 6), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }));
+      s.position.set((Math.random() - 0.5) * 0.7, -0.2 - Math.random() * 0.75, -0.3 - Math.random() * 0.12);
+      g.add(s);
+    }
+  }
+  return g;
+}
+
+let hatMesh = null, capeMesh = null;
+function applyWardrobe() {
+  if (hatMesh && hatMesh.parent) hatMesh.parent.remove(hatMesh);
+  if (capeMesh && capeMesh.parent) capeMesh.parent.remove(capeMesh);
+  hatMesh = capeMesh = null;
+  const w = progress.wardrobe || { hat: 'none', cape: 'none' };
+  const vHead = vrmBones && vrmBones.head;
+  const vSpine = vrmBones && vrmBones.spine;
+
+  if (w.hat && w.hat !== 'none') {
+    hatMesh = makeHat(w.hat);
+    // VRM bones are in normalized metres; the primitive rig uses larger local units
+    hatMesh.scale.setScalar(vHead ? 0.34 : 1);
+    hatMesh.position.y = vHead ? 0.15 : 0.36;
+    (vHead || head).add(hatMesh);
+  }
+  if (w.cape && w.cape !== 'none') {
+    capeMesh = makeCape(w.cape);
+    capeMesh.scale.setScalar(vSpine ? 0.42 : 1);
+    capeMesh.position.set(0, vSpine ? 0.42 : 1.35, vSpine ? -0.07 : -0.2);
+    (vSpine || body).add(capeMesh);
+  }
+}
+
+function setWardrobe(slot, id) {
+  if (!progress.wardrobe) progress.wardrobe = { hat: 'none', cape: 'none' };
+  progress.wardrobe[slot] = id;
+  applyWardrobe(); saveProgress(); chime(880);
+  burst(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), 0xffe08a, 14);
+}
+
+function renderWardrobe() {
+  for (const slot of ['hat', 'cape']) {
+    const box = $('wr_' + slot);
+    if (!box) continue;
+    box.innerHTML = '';
+    const cur = (progress.wardrobe || {})[slot] || 'none';
+    for (const item of WARDROBE[slot]) {
+      const ok = item.need();
+      const b = document.createElement('button');
+      b.className = 'wrItem' + (cur === item.id ? ' sel' : '') + (ok ? '' : ' locked');
+      b.textContent = ok ? item.name : '🔒 ' + item.name;
+      b.title = ok ? item.name : 'Locked — ' + item.req;
+      if (ok) b.addEventListener('click', () => { setWardrobe(slot, item.id); renderWardrobe(); });
+      else { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
+      box.appendChild(b);
+      if (!ok) {
+        const hint = document.createElement('span');
+        hint.className = 'wrReq'; hint.textContent = item.req;
+        box.appendChild(hint);
+      }
+    }
+  }
+}
+function openWardrobe() { renderWardrobe(); const el = $('wardrobe'); if (el) el.classList.add('on'); }
+function closeWardrobe() { const el = $('wardrobe'); if (el) el.classList.remove('on'); }
+const wardrobeBtn = $('wardrobeBtn');
+if (wardrobeBtn) wardrobeBtn.addEventListener('click', openWardrobe);
+const wardrobeClose = $('wardrobeClose');
+if (wardrobeClose) wardrobeClose.addEventListener('click', closeWardrobe);
+applyWardrobe();
+
 // ---------- PWA: register the service worker (installable app) ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* optional */ });
@@ -975,6 +1099,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyE') interactPressed = true;
   if (e.code === 'KeyP') petPressed = true;
   if (e.code === 'KeyJ') { const j = $('journal'); if (j && j.classList.contains('on')) closeJournal(); else openJournal(); }
+  if (e.code === 'KeyK') { const w = $('wardrobe'); if (w && w.classList.contains('on')) closeWardrobe(); else openWardrobe(); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
