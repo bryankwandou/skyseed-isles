@@ -159,7 +159,55 @@ export const STRINGS = {
     'Log in / Sign up': 'Masuk / Daftar',
     'to save across devices': 'untuk menyimpan lintas perangkat',
     'Hi,': 'Hai,',
-    'Log out': 'Keluar'
+    'Log out': 'Keluar',
+
+    // --- account page ---
+    'Save your sparks, buddies and islands to your own account.': 'Simpan kilau, teman, dan pulaumu ke akunmu sendiri.',
+    'Log in': 'Masuk',
+    'Sign up': 'Daftar',
+    'Username or email': 'Nama pengguna atau email',
+    'Username': 'Nama pengguna',
+    'Password': 'Kata sandi',
+    'Email': 'Email',
+    'Confirm password': 'Ulangi kata sandi',
+    '3–20 letters, numbers or underscores.': '3–20 huruf, angka, atau garis bawah.',
+    'At least 8 characters.': 'Minimal 8 karakter.',
+    'Create account': 'Buat akun',
+    'or': 'atau',
+    'Continue with Google': 'Lanjut dengan Google',
+    'coming soon': 'segera hadir',
+    '← Back to the game': '← Kembali ke permainan',
+    'I agree to the': 'Saya setuju dengan',
+    'Terms & Conditions': 'Syarat & Ketentuan',
+    'I accept the': 'Saya menerima',
+    'Privacy agreement': 'Perjanjian Privasi',
+    '— this account only stores game progress.': '— akun ini hanya menyimpan kemajuan permainan.',
+    'Enter your username and password.': 'Masukkan nama pengguna dan kata sandimu.',
+    'Logging in…': 'Sedang masuk…',
+    'Could not log in.': 'Tidak bisa masuk.',
+    'Welcome back, {name}!': 'Selamat datang kembali, {name}!',
+    'The two passwords do not match.': 'Kedua kata sandi tidak sama.',
+    'Please accept the Terms and Privacy agreement.': 'Harap setujui Syarat dan Perjanjian Privasi.',
+    'Creating your account…': 'Membuat akunmu…',
+    'Could not create the account.': 'Tidak bisa membuat akun.',
+    'Account created! Taking you to the game…': 'Akun dibuat! Mengantarmu ke permainan…',
+    'Already logged in as {name}. Redirecting…': 'Sudah masuk sebagai {name}. Mengalihkan…',
+
+    // --- desktop help line (only shown on the website, so it matters most there) ---
+    'HELP_LINE': 'WASD lari · Spasi lompat · dekati slime untuk berteman · P elus · R naiki temanmu · E bicara · B bangun (R putar) · J jurnal · K lemari baju · F sentil · Esc pengaturan',
+    'TITLE_TAGLINE': 'Miru si tukang kebun langit menjelajahi pulau-pulau yang tak pernah habis. Kumpulkan kilau, buka jurus baru, berteman dengan slime, dan tunggangi mereka sampai tumbuh sayap.',
+
+    // --- policies ---
+    'TERMS_TEXT': 'Skyseed Isles — Syarat & Ketentuan\n\n'
+      + '• Ini permainan gratis untuk anak-anak. Bermainlah dengan baik.\n'
+      + '• Kami hanya menyimpan yang diperlukan permainan: nama pengguna, email, kata sandi yang diacak aman, dan kemajuan bermainmu.\n'
+      + '• Tanpa iklan, tanpa pembelian, tanpa penjualan data.\n'
+      + '• Orang tua sebaiknya menyiapkan dan mengawasi akun anak.',
+    'PRIVACY_TEXT': 'Skyseed Isles — Perjanjian Privasi\n\n'
+      + '• Kata sandimu hanya disimpan dalam bentuk acak satu arah — tidak ada yang bisa membacanya.\n'
+      + '• Email hanya dipakai untuk memulihkan akun.\n'
+      + '• Kemajuan permainan (kilau, teman, bangunan) disimpan agar ikut denganmu antar perangkat.\n'
+      + '• Kamu bisa meminta penghapusan akun dan datanya kapan saja.'
   }
 };
 
