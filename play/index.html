@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Skyseed Isles — Play</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<meta name="theme-color" content="#8fd0f5" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Skyseed" />
 <style>
   :root { --ink:#1d2433; --panel:rgba(255,255,255,.82); }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -160,6 +165,12 @@
     user-select:none; touch-action:none; cursor:pointer;
   }
   #buildBtn.on { background:#ffb24d; border-color:#fff; }
+  #careBtn {
+    position:fixed; z-index:22; right:24px; top:150px; width:64px; height:44px;
+    border-radius:14px; border:2px solid rgba(255,255,255,.7); background:rgba(255,142,184,.55);
+    color:#fff; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    user-select:none; touch-action:none; cursor:pointer;
+  }
   #palette {
     position:fixed; z-index:22; left:50%; bottom:16px; transform:translateX(-50%);
     display:none; gap:6px; flex-wrap:wrap; justify-content:center; max-width:94vw;
@@ -236,7 +247,7 @@
     <div class="setRow"><label for="setContrast">High contrast</label><input id="setContrast" type="checkbox" /></div>
     <div class="setRow"><label for="setBigText">Bigger text</label><input id="setBigText" type="checkbox" /></div>
     <button id="resumeBtn">Back to playing</button>
-    <div id="pauseLinks"><a href="./account.html">Account</a><a href="../index.html">Home</a></div>
+    <div id="pauseLinks"><a href="./account.html">Account</a><a href="./family.html">Family</a><a href="../index.html">Home</a></div>
   </div>
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -249,17 +260,23 @@
 </div>
 <div id="accountBar">…</div>
 <div id="msg"></div>
-<div id="help">Click world to grab camera · mouse to look · WASD run · Shift sprint · Space jump · walk up to a slime to befriend it · B to build · F to bop · scroll to zoom</div>
+<div id="help">Click world to grab camera · WASD run · Space jump · befriend slimes by standing close · P to pet a buddy · E to talk · B build (R rotates) · J journal · F bop</div>
 <div id="stick"><div id="knob"></div></div>
 <button class="tbtn" id="jumpBtn" aria-label="Jump">JUMP</button>
 <button class="tbtn" id="punchBtn" aria-label="Punch" style="right:120px; bottom:44px;">POW</button>
 <button id="buildBtn" aria-label="Toggle build mode">Build</button>
+<button id="careBtn" aria-label="Pet your buddy">♥ Pet</button>
 <div id="palette" aria-label="Building palette">
   <button data-t="tree" class="sel">Tree</button>
   <button data-t="flower">Flower</button>
   <button data-t="mushroom">Mushroom</button>
   <button data-t="lantern">Lantern</button>
   <button data-t="crystal">Crystal</button>
+  <button data-t="fence">Fence</button>
+  <button data-t="bench">Bench</button>
+  <button data-t="arch">Arch</button>
+  <button data-t="path">Path</button>
+  <button id="rotateBtn" class="act">↻ Rotate</button>
   <button id="placeBtn" class="act">Place</button>
   <button id="undoBtn" class="act">Undo</button>
 </div>

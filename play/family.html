@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skyseed Isles — Family Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>" />
+<style>
+  :root { --ink:#1d2433; --muted:#5b6b82; --line:#d6e2ee; --brand:#a06bf0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    min-height:100vh; font-family:"Segoe UI",system-ui,sans-serif; color:var(--ink);
+    background:linear-gradient(180deg,#8fd0f5 0%,#c9ecff 55%,#eafff2 100%); padding:24px;
+  }
+  .wrap { max-width:860px; margin:0 auto; }
+  .card { background:#fff; border-radius:20px; padding:24px; box-shadow:0 14px 44px rgba(30,60,120,.18); }
+  h1 { font-size:24px; color:#1d3a5f; }
+  .sub { color:var(--muted); font-size:13px; margin:6px 0 18px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
+  td b { font-variant-numeric:tabular-nums; }
+  .tag { font-size:11px; background:#f3e8ff; color:#7a3ff0; border-radius:99px; padding:2px 9px; font-weight:700; }
+  .del {
+    border:1.5px solid #f3c1cd; background:#fff; color:#d64b6a; font-weight:700; font-size:12px;
+    padding:6px 12px; border-radius:9px; cursor:pointer;
+  }
+  .del:hover { background:#fff0f3; }
+  .del:focus-visible, a:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
+  #status { margin:14px 0; font-size:14px; font-weight:600; }
+  #status.err { color:#d64b6a; }
+  .totals { margin-top:14px; font-size:14px; color:var(--muted); }
+  .foot { margin-top:16px; font-size:13px; }
+  .foot a { color:var(--brand); font-weight:600; text-decoration:none; }
+  .empty { padding:30px 8px; text-align:center; color:var(--muted); }
+  @media (max-width:640px) { th:nth-child(n+5), td:nth-child(n+5) { display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+  <h1>Family Dashboard</h1>
+  <p class="sub">Watch all your children's progress in one place. Only parent accounts can see this page.</p>
+  <div id="status">Checking who you are…</div>
+  <div id="content"></div>
+  <div class="foot"><a href="./index.html">← Back to the game</a> · <a href="./account.html">Account</a></div>
+</div></div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+async function load() {
+  const me = await fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null);
+  if (!me) { $('status').textContent = 'Please log in with the parent account first.'; $('status').className = 'err'; return; }
+  if (!me.isAdmin) { $('status').textContent = 'This page is for the parent account only.'; $('status').className = 'err'; return; }
+
+  const r = await fetch('/api/family');
+  if (!r.ok) { $('status').textContent = 'Could not load the family list.'; $('status').className = 'err'; return; }
+  const { users } = await r.json();
+  $('status').textContent = 'Logged in as ' + me.username + ' (parent)';
+
+  if (!users.length) { $('content').innerHTML = '<div class="empty">No accounts yet.</div>'; return; }
+
+  const kids = users.filter(u => !u.is_admin);
+  const rows = users.map(u => `
+    <tr>
+      <td><b>${esc(u.username)}</b> ${u.is_admin ? '<span class="tag">parent</span>' : ''}</td>
+      <td><b>${u.sparks}</b></td>
+      <td><b>${u.buddies}</b></td>
+      <td><b>${u.builds}</b></td>
+      <td><b>${u.quests}</b>/6</td>
+      <td><b>${u.biomes}</b></td>
+      <td>${new Date(u.updated_at).toLocaleDateString()}</td>
+      <td>${u.is_admin ? '' : `<button class="del" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button>`}</td>
+    </tr>`).join('');
+
+  $('content').innerHTML = `
+    <table>
+      <thead><tr><th>Child</th><th>Sparks</th><th>Buddies</th><th>Builds</th><th>Quests</th><th>Regions</th><th>Last played</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="totals">${kids.length} child account${kids.length === 1 ? '' : 's'} ·
+      family total: ${kids.reduce((a, u) => a + u.sparks, 0)} sparks,
+      ${kids.reduce((a, u) => a + u.buddies, 0)} buddies,
+      ${kids.reduce((a, u) => a + u.builds, 0)} decorations</p>`;
+
+  document.querySelectorAll('.del').forEach(btn => btn.addEventListener('click', async () => {
+    const name = btn.dataset.name;
+    if (!confirm('Delete "' + name + '" and ALL their progress? This cannot be undone.')) return;
+    if (!confirm('Are you really sure? "' + name + '" will lose everything.')) return;
+    const dr = await fetch('/api/family', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: +btn.dataset.id })
+    });
+    if (dr.ok) load(); else { const d = await dr.json().catch(() => ({})); alert(d.error || 'Could not delete.'); }
+  }));
+}
+load();
+</script>
+</body>
+</html>
