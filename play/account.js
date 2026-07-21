@@ -1,5 +1,15 @@
 // Account page: register + login, then bounce to the game.
+import { t as L, setLang, translateDom } from './i18n.js';
+
 const $ = id => document.getElementById(id);
+
+// match the language the child picked in the game
+try {
+  const s = JSON.parse(localStorage.getItem('skyseed_settings_v1')) || {};
+  setLang(s.lang || 'id');
+  document.documentElement.lang = s.lang || 'id';
+} catch (e) { setLang('id'); }
+translateDom();
 
 function showTab(which) {
   const login = which === 'login';
@@ -35,7 +45,7 @@ async function post(url, body) {
 // If already logged in, offer to jump straight into the game.
 fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => {
   if (u && u.username) {
-    setMsg($('li_msg'), 'Already logged in as ' + u.username + '. Redirecting…', 'ok');
+    setMsg($('li_msg'), L('Already logged in as {name}. Redirecting…', { name: u.username }), 'ok');
     setTimeout(() => location.href = './index.html', 900);
   }
 }).catch(() => {});
@@ -46,12 +56,12 @@ $('loginForm').addEventListener('submit', async e => {
   const btn = e.target.querySelector('.primary');
   const username = $('li_user').value.trim();
   const password = $('li_pass').value;
-  if (!username || !password) { setMsg($('li_msg'), 'Enter your username and password.', 'err'); return; }
-  btn.disabled = true; setMsg($('li_msg'), 'Logging in…');
+  if (!username || !password) { setMsg($('li_msg'), L('Enter your username and password.'), 'err'); return; }
+  btn.disabled = true; setMsg($('li_msg'), L('Logging in…'));
   const { ok, data } = await post('/api/login', { username, password });
   btn.disabled = false;
-  if (!ok) { setMsg($('li_msg'), data.error || 'Could not log in.', 'err'); return; }
-  setMsg($('li_msg'), 'Welcome back, ' + data.username + '!', 'ok');
+  if (!ok) { setMsg($('li_msg'), data.error || L('Could not log in.'), 'err'); return; }
+  setMsg($('li_msg'), L('Welcome back, {name}!', { name: data.username }), 'ok');
   setTimeout(() => location.href = './index.html', 700);
 });
 
@@ -67,13 +77,13 @@ $('registerForm').addEventListener('submit', async e => {
     acceptedTerms: $('rg_terms').checked,
     acceptedPrivacy: $('rg_privacy').checked
   };
-  if (payload.password !== payload.confirm) { setMsg($('rg_msg'), 'The two passwords do not match.', 'err'); return; }
-  if (!payload.acceptedTerms || !payload.acceptedPrivacy) { setMsg($('rg_msg'), 'Please accept the Terms and Privacy agreement.', 'err'); return; }
-  btn.disabled = true; setMsg($('rg_msg'), 'Creating your account…');
+  if (payload.password !== payload.confirm) { setMsg($('rg_msg'), L('The two passwords do not match.'), 'err'); return; }
+  if (!payload.acceptedTerms || !payload.acceptedPrivacy) { setMsg($('rg_msg'), L('Please accept the Terms and Privacy agreement.'), 'err'); return; }
+  btn.disabled = true; setMsg($('rg_msg'), L('Creating your account…'));
   const { ok, data } = await post('/api/register', payload);
   btn.disabled = false;
-  if (!ok) { setMsg($('rg_msg'), data.error || 'Could not create the account.', 'err'); return; }
-  setMsg($('rg_msg'), 'Account created! Taking you to the game…', 'ok');
+  if (!ok) { setMsg($('rg_msg'), data.error || L('Could not create the account.'), 'err'); return; }
+  setMsg($('rg_msg'), L('Account created! Taking you to the game…'), 'ok');
   setTimeout(() => location.href = './index.html', 800);
 });
 
@@ -93,17 +103,9 @@ fetch('/api/google', { method: 'HEAD' }).then(r => {
 // Simple in-page policy popups (kept short and honest).
 $('openTerms').addEventListener('click', e => {
   e.preventDefault();
-  alert('Skyseed Isles — Terms & Conditions\n\n'
-    + '• This is a free game for children. Play nicely.\n'
-    + '• We store only what the game needs: your username, email, a securely hashed password, and your in-game progress.\n'
-    + '• No ads, no purchases, no selling of data.\n'
-    + '• A parent should set up and supervise children’s accounts.');
+  alert(L('TERMS_TEXT'));
 });
 $('openPrivacy').addEventListener('click', e => {
   e.preventDefault();
-  alert('Skyseed Isles — Privacy agreement\n\n'
-    + '• Your password is stored only as a one-way hash — nobody can read it back.\n'
-    + '• Your email is used only to recover the account.\n'
-    + '• Game progress (sparks, buddies, builds) is saved so it follows you between devices.\n'
-    + '• You can ask to delete an account and its data at any time.');
+  alert(L('PRIVACY_TEXT'));
 });

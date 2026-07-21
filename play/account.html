@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -68,28 +68,28 @@
 <div class="card">
   <div class="brand">
     <h1>SKYSEED ISLES</h1>
-    <p>Save your sparks, buddies and islands to your own account.</p>
+    <p data-i18n="Save your sparks, buddies and islands to your own account.">Save your sparks, buddies and islands to your own account.</p>
   </div>
 
   <div class="tabs" role="tablist">
-    <button id="tabLogin" class="on" role="tab" aria-selected="true">Log in</button>
-    <button id="tabRegister" role="tab" aria-selected="false">Sign up</button>
+    <button id="tabLogin" class="on" role="tab" aria-selected="true" data-i18n="Log in">Log in</button>
+    <button id="tabRegister" role="tab" aria-selected="false" data-i18n="Sign up">Sign up</button>
   </div>
 
   <!-- LOGIN -->
   <form id="loginForm" class="on" autocomplete="on" novalidate>
     <div>
-      <label for="li_user">Username or email</label>
+      <label for="li_user" data-i18n="Username or email">Username or email</label>
       <input id="li_user" name="username" type="text" autocomplete="username" required />
     </div>
     <div>
-      <label for="li_pass">Password</label>
+      <label for="li_pass" data-i18n="Password">Password</label>
       <input id="li_pass" name="password" type="password" autocomplete="current-password" required />
     </div>
-    <button class="primary" type="submit">Log in</button>
-    <div class="divider">or</div>
+    <button class="primary" type="submit" data-i18n="Log in">Log in</button>
+    <div class="divider" data-i18n="or">or</div>
     <button type="button" class="google" disabled aria-disabled="true">
-      Continue with Google <span class="soon">coming soon</span>
+      <span data-i18n="Continue with Google">Continue with Google</span> <span class="soon" data-i18n="coming soon">coming soon</span>
     </button>
 
     <div class="msg" id="li_msg" role="status" aria-live="polite"></div>
@@ -98,43 +98,43 @@
   <!-- REGISTER -->
   <form id="registerForm" autocomplete="on" novalidate>
     <div>
-      <label for="rg_user">Username</label>
+      <label for="rg_user" data-i18n="Username">Username</label>
       <input id="rg_user" name="username" type="text" autocomplete="username" required
              pattern="[A-Za-z0-9_]{3,20}" />
-      <div class="hint">3–20 letters, numbers or underscores.</div>
+      <div class="hint" data-i18n="3–20 letters, numbers or underscores.">3–20 letters, numbers or underscores.</div>
     </div>
     <div>
-      <label for="rg_email">Email</label>
+      <label for="rg_email" data-i18n="Email">Email</label>
       <input id="rg_email" name="email" type="email" autocomplete="email" required />
     </div>
     <div>
-      <label for="rg_pass">Password</label>
+      <label for="rg_pass" data-i18n="Password">Password</label>
       <input id="rg_pass" name="password" type="password" autocomplete="new-password" required minlength="8" />
-      <div class="hint">At least 8 characters.</div>
+      <div class="hint" data-i18n="At least 8 characters.">At least 8 characters.</div>
     </div>
     <div>
-      <label for="rg_confirm">Confirm password</label>
+      <label for="rg_confirm" data-i18n="Confirm password">Confirm password</label>
       <input id="rg_confirm" name="confirm" type="password" autocomplete="new-password" required minlength="8" />
     </div>
     <label class="check">
       <input id="rg_terms" type="checkbox" required />
-      <span>I agree to the <a href="#" id="openTerms">Terms &amp; Conditions</a>.</span>
+      <span><span data-i18n="I agree to the">I agree to the</span> <a href="#" id="openTerms" data-i18n="Terms & Conditions">Terms &amp; Conditions</a>.</span>
     </label>
     <label class="check">
       <input id="rg_privacy" type="checkbox" required />
-      <span>I accept the <a href="#" id="openPrivacy">Privacy agreement</a> — this account only stores game progress.</span>
+      <span><span data-i18n="I accept the">I accept the</span> <a href="#" id="openPrivacy" data-i18n="Privacy agreement">Privacy agreement</a> <span data-i18n="— this account only stores game progress.">— this account only stores game progress.</span></span>
     </label>
-    <button class="primary" type="submit">Create account</button>
-    <div class="divider">or</div>
+    <button class="primary" type="submit" data-i18n="Create account">Create account</button>
+    <div class="divider" data-i18n="or">or</div>
     <button type="button" class="google" disabled aria-disabled="true">
-      Continue with Google <span class="soon">coming soon</span>
+      <span data-i18n="Continue with Google">Continue with Google</span> <span class="soon" data-i18n="coming soon">coming soon</span>
     </button>
 
     <div class="msg" id="rg_msg" role="status" aria-live="polite"></div>
   </form>
 
-  <div class="foot"><a href="./index.html">← Back to the game</a></div>
+  <div class="foot"><a href="./index.html" data-i18n="← Back to the game">← Back to the game</a></div>
 </div>
-<script src="./account.js"></script>
+<script type="module" src="./account.js"></script>
 </body>
 </html>
