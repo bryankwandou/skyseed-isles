@@ -39,6 +39,22 @@
   .foot { margin-top:16px; font-size:13px; }
   .foot a { color:var(--brand); font-weight:600; text-decoration:none; }
   .empty { padding:30px 8px; text-align:center; color:var(--muted); }
+  #addBox { background:#f7fbff; border:1.5px solid var(--line); border-radius:14px; padding:16px; margin-bottom:18px; }
+  #addBox h2 { color:#1d3a5f; }
+  #addForm { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; }
+  #addForm label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px; }
+  #addForm input {
+    padding:9px 11px; border:1.5px solid var(--line); border-radius:10px; font-size:14px; width:180px;
+  }
+  #addForm input:focus-visible { outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(160,107,240,.2); }
+  #addBtn {
+    border:none; cursor:pointer; color:#fff; font-weight:700; font-size:14px;
+    padding:10px 18px; border-radius:10px; background:linear-gradient(135deg,#ff8fb8,#a06bf0);
+  }
+  #addBtn:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
+  #addMsg { font-size:13px; font-weight:600; align-self:center; }
+  #addMsg.err { color:#d64b6a; }
+  #addMsg.ok { color:#2f9e6f; }
   @media (max-width:640px) { th:nth-child(n+5), td:nth-child(n+5) { display:none; } }
 </style>
 </head>
@@ -47,6 +63,18 @@
   <h1>Family Dashboard</h1>
   <p class="sub">Watch all your children's progress in one place. Only parent accounts can see this page.</p>
   <div id="status">Checking who you are…</div>
+  <div id="addBox" hidden>
+    <h2 style="font-size:16px;margin-bottom:4px">Add a child</h2>
+    <p class="sub" style="margin-bottom:10px">Children never enter an email — just a username and a password you both remember.</p>
+    <form id="addForm">
+      <label for="ch_user">Child's username</label>
+      <input id="ch_user" type="text" autocomplete="off" pattern="[A-Za-z0-9_]{3,20}" required />
+      <label for="ch_pass">Password (min 8 characters)</label>
+      <input id="ch_pass" type="text" autocomplete="off" minlength="8" required />
+      <button type="submit" id="addBtn">Create account</button>
+      <span id="addMsg"></span>
+    </form>
+  </div>
   <div id="content"></div>
   <div class="foot"><a href="./index.html">← Back to the game</a> · <a href="./account.html">Account</a></div>
 </div></div>
@@ -63,6 +91,7 @@ async function load() {
   if (!r.ok) { $('status').textContent = 'Could not load the family list.'; $('status').className = 'err'; return; }
   const { users } = await r.json();
   $('status').textContent = 'Logged in as ' + me.username + ' (parent)';
+  $('addBox').hidden = false;
 
   if (!users.length) { $('content').innerHTML = '<div class="empty">No accounts yet.</div>'; return; }
 
@@ -116,6 +145,23 @@ async function load() {
     if (dr.ok) load(); else { const d = await dr.json().catch(() => ({})); alert(d.error || 'Could not delete.'); }
   }));
 }
+$('addForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('addMsg'), btn = $('addBtn');
+  const username = $('ch_user').value.trim(), password = $('ch_pass').value;
+  msg.className = ''; msg.textContent = 'Creating…'; btn.disabled = true;
+  const r = await fetch('/api/family', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  btn.disabled = false;
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { msg.className = 'err'; msg.textContent = d.error || 'Could not create the account.'; return; }
+  msg.className = 'ok'; msg.textContent = 'Created "' + d.username + '".';
+  $('ch_user').value = ''; $('ch_pass').value = '';
+  load();
+});
+
 load();
 </script>
 </body>

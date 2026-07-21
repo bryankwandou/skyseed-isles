@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # Syntax-check everything that ships. The browser suite needs a real GPU-less
+      # Chrome and a database, so it stays a local/manual step (see test/README.md).
+      - name: Check API functions
+        run: for f in api/*.js api/_lib.mjs scripts/*.mjs; do node --check "$f" || exit 1; done
+
+      - name: Check browser modules
+        run: |
+          node --input-type=module --check < play/game.js
+          node --input-type=module --check < play/i18n.js
+          node --check play/account.js
+          node --check play/sw.js
+
+      - name: Validate JSON
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('play/manifest.webmanifest','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
+
+      - name: Guard against committed secrets
+        run: |
+          if git ls-files | grep -E '^\.env$|^\.env\.local$'; then
+            echo "A real .env file is committed — remove it."; exit 1
+          fi
+          if grep -rElq "postgresql://[^ ]*:[^ ]*@" --include=*.js --include=*.mjs --include=*.json --include=*.md . ; then
+            echo "A database URL with credentials appears in tracked files."; exit 1
+          fi
+          echo "No secrets found in tracked files."
