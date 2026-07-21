@@ -240,7 +240,7 @@
 <div id="title">
   <h1>SKYSEED ISLES</h1>
   <p>Miru the sky gardener drifts across islands that never run out. Gather sparks, unlock new moves, and wander into snow, sunset and starlit lands that keep appearing the further you roam.</p>
-  <button id="startBtn">Start Adventure</button>
+  <button id="startBtn" data-i18n="Start Adventure">Start Adventure</button>
   <div id="loadWrap" aria-label="Loading Miru"><div id="loadBar"></div></div>
   <p style="font-size:13px">WASD run · mouse look · Space jump · walk up to a slime to make a friend · B to build & decorate · F to bop · Esc for settings · everything is saved</p>
 </div>
@@ -249,83 +249,86 @@
 <button id="wardrobeBtn" aria-label="Wardrobe">👒</button>
 <div id="wardrobe" role="dialog" aria-label="Wardrobe">
   <div id="wardrobeCard">
-    <h2>Miru's Wardrobe</h2>
-    <p class="sub">Everything here is earned by exploring — never bought.</p>
-    <h3>Hat</h3>
+    <h2 data-i18n="Miru's Wardrobe">Miru's Wardrobe</h2>
+    <p class="sub" data-i18n="Everything here is earned by exploring — never bought.">Everything here is earned by exploring — never bought.</p>
+    <h3 data-i18n="Hat">Hat</h3>
     <div class="wrBox" id="wr_hat"></div>
-    <h3>Cape</h3>
+    <h3 data-i18n="Cape">Cape</h3>
     <div class="wrBox" id="wr_cape"></div>
-    <button id="wardrobeClose">Close (K)</button>
+    <button id="wardrobeClose" data-i18n="Close (K)">Close (K)</button>
   </div>
 </div>
-<button id="talkBtn" aria-label="Talk to the Skykeeper">TALK</button>
+<button id="talkBtn" aria-label="Talk to the Skykeeper" data-i18n="TALK">TALK</button>
 <div id="journal" role="dialog" aria-label="Journal">
   <div id="journalCard">
-    <h2>Sky Journal</h2>
-    <div class="jRow"><span>Regions discovered</span><b id="jBiomes">0</b></div>
-    <div class="jRow"><span>Buddies</span><b id="jBuddies">0</b></div>
-    <div class="jRow"><span>Shiny slimes befriended</span><b id="jShiny">0</b></div>
-    <div class="jRow"><span>Moonpetals found</span><b id="jPetal">0</b></div>
-    <div class="jRow"><span>Great Trees visited</span><b id="jWonder">0</b></div>
-    <div class="jRow"><span>Slimes bopped</span><b id="jBops">0</b></div>
-    <div class="jRow"><span>Decorations placed</span><b id="jBuilds">0</b></div>
-    <div class="jRow"><span>Skykeeper quests</span><b id="jQuests">0</b></div>
-    <button id="journalClose">Close (J)</button>
+    <h2 data-i18n="Sky Journal">Sky Journal</h2>
+    <div class="jRow"><span data-i18n="Regions discovered">Regions discovered</span><b id="jBiomes">0</b></div>
+    <div class="jRow"><span data-i18n="Buddies">Buddies</span><b id="jBuddies">0</b></div>
+    <div class="jRow"><span data-i18n="Shiny slimes befriended">Shiny slimes befriended</span><b id="jShiny">0</b></div>
+    <div class="jRow"><span data-i18n="Moonpetals found">Moonpetals found</span><b id="jPetal">0</b></div>
+    <div class="jRow"><span data-i18n="Great Trees visited">Great Trees visited</span><b id="jWonder">0</b></div>
+    <div class="jRow"><span data-i18n="Slimes bopped">Slimes bopped</span><b id="jBops">0</b></div>
+    <div class="jRow"><span data-i18n="Decorations placed">Decorations placed</span><b id="jBuilds">0</b></div>
+    <div class="jRow"><span data-i18n="Skykeeper quests">Skykeeper quests</span><b id="jQuests">0</b></div>
+    <button id="journalClose" data-i18n="Close (J)">Close (J)</button>
   </div>
 </div>
 <div id="dialog" role="dialog" aria-label="Skykeeper dialog">
   <div id="dlgCard">
-    <div id="dlgName">✦ THE SKYKEEPER</div>
+    <div id="dlgName" data-i18n="✦ THE SKYKEEPER">✦ THE SKYKEEPER</div>
     <div id="dlgText"></div>
-    <button id="dlgBtn">Okay!</button>
+    <button id="dlgBtn" data-i18n="Okay!">Okay!</button>
   </div>
 </div>
 <div id="pauseMenu" role="dialog" aria-label="Settings">
   <div id="pauseCard">
-    <h2>Paused</h2>
-    <div class="setRow"><label for="setMusic">Music</label><input id="setMusic" type="range" min="0" max="1" step="0.05" /></div>
-    <div class="setRow"><label for="setSfx">Sounds</label><input id="setSfx" type="range" min="0" max="1" step="0.05" /></div>
-    <div class="setRow"><label for="setQuality">Quality</label>
-      <select id="setQuality"><option value="high">Pretty</option><option value="low">Fast</option></select>
+    <h2 data-i18n="Paused">Paused</h2>
+    <div class="setRow"><label for="setMusic" data-i18n="Music">Music</label><input id="setMusic" type="range" min="0" max="1" step="0.05" /></div>
+    <div class="setRow"><label for="setSfx" data-i18n="Sounds">Sounds</label><input id="setSfx" type="range" min="0" max="1" step="0.05" /></div>
+    <div class="setRow"><label for="setQuality" data-i18n="Quality">Quality</label>
+      <select id="setQuality"><option value="high" data-i18n="Pretty">Pretty</option><option value="low" data-i18n="Fast">Fast</option></select>
     </div>
-    <div class="setRow"><label for="setSens">Camera speed</label><input id="setSens" type="range" min="0.4" max="2" step="0.1" /></div>
-    <div class="setRow"><label for="setInvert">Invert look</label><input id="setInvert" type="checkbox" /></div>
-    <div class="setRow"><label for="setContrast">High contrast</label><input id="setContrast" type="checkbox" /></div>
-    <div class="setRow"><label for="setBigText">Bigger text</label><input id="setBigText" type="checkbox" /></div>
-    <button id="resumeBtn">Back to playing</button>
-    <div id="pauseLinks"><a href="./account.html">Account</a><a href="./family.html">Family</a><a href="../index.html">Home</a></div>
+    <div class="setRow"><label for="setSens" data-i18n="Camera speed">Camera speed</label><input id="setSens" type="range" min="0.4" max="2" step="0.1" /></div>
+    <div class="setRow"><label for="setInvert" data-i18n="Invert look">Invert look</label><input id="setInvert" type="checkbox" /></div>
+    <div class="setRow"><label for="setContrast" data-i18n="High contrast">High contrast</label><input id="setContrast" type="checkbox" /></div>
+    <div class="setRow"><label for="setBigText" data-i18n="Bigger text">Bigger text</label><input id="setBigText" type="checkbox" /></div>
+    <div class="setRow"><label for="setLang" data-i18n="Language">Language</label>
+      <select id="setLang"><option value="id">Bahasa Indonesia</option><option value="en">English</option></select>
+    </div>
+    <button id="resumeBtn" data-i18n="Back to playing">Back to playing</button>
+    <div id="pauseLinks"><a href="./account.html" data-i18n="Account">Account</a><a href="./family.html" data-i18n="Family">Family</a><a href="../index.html" data-i18n="Home">Home</a></div>
   </div>
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="hud">
-  Sparks <b id="cSpark">0</b><br>
-  Next: <b id="nextGoal">—</b> in <b id="nextIn">—</b><br>
-  Buddies <b id="cBuddy">none yet</b><br>
-  Slimes bopped <b id="cBop">0</b><br>
-  Quest: <b id="qLine">Talk to the Skykeeper ✦</b>
+  <span data-i18n="Sparks">Sparks</span> <b id="cSpark">0</b><br>
+  <span data-i18n="Next:">Next:</span> <b id="nextGoal">—</b> <span data-i18n="in">in</span> <b id="nextIn">—</b><br>
+  <span data-i18n="Buddies">Buddies</span> <b id="cBuddy">none yet</b><br>
+  <span data-i18n="Slimes bopped">Slimes bopped</span> <b id="cBop">0</b><br>
+  <span data-i18n="Quest:">Quest:</span> <b id="qLine">Talk to the Skykeeper ✦</b>
 </div>
 <div id="accountBar">…</div>
 <div id="msg"></div>
 <div id="help">WASD run · Space jump · stand close to a slime to befriend it · P pet · <b>R ride your buddy</b> · E talk · B build (R rotates in build) · J journal · K wardrobe · F bop</div>
 <div id="stick"><div id="knob"></div></div>
-<button class="tbtn" id="jumpBtn" aria-label="Jump">JUMP</button>
-<button class="tbtn" id="punchBtn" aria-label="Punch" style="right:120px; bottom:44px;">POW</button>
-<button id="buildBtn" aria-label="Toggle build mode">Build</button>
-<button id="careBtn" aria-label="Pet your buddy">♥ Pet</button>
+<button class="tbtn" id="jumpBtn" aria-label="Jump" data-i18n="JUMP">JUMP</button>
+<button class="tbtn" id="punchBtn" aria-label="Punch" style="right:120px; bottom:44px;" data-i18n="POW">POW</button>
+<button id="buildBtn" aria-label="Toggle build mode" data-i18n="Build">Build</button>
+<button id="careBtn" aria-label="Pet your buddy" data-i18n="♥ Pet">♥ Pet</button>
 <button id="rideBtn" aria-label="Ride your buddy">RIDE</button>
 <div id="palette" aria-label="Building palette">
-  <button data-t="tree" class="sel">Tree</button>
-  <button data-t="flower">Flower</button>
-  <button data-t="mushroom">Mushroom</button>
-  <button data-t="lantern">Lantern</button>
-  <button data-t="crystal">Crystal</button>
-  <button data-t="fence">Fence</button>
-  <button data-t="bench">Bench</button>
-  <button data-t="arch">Arch</button>
-  <button data-t="path">Path</button>
-  <button id="rotateBtn" class="act">↻ Rotate</button>
-  <button id="placeBtn" class="act">Place</button>
-  <button id="undoBtn" class="act">Undo</button>
+  <button data-t="tree" class="sel" data-i18n="Tree">Tree</button>
+  <button data-t="flower" data-i18n="Flower">Flower</button>
+  <button data-t="mushroom" data-i18n="Mushroom">Mushroom</button>
+  <button data-t="lantern" data-i18n="Lantern">Lantern</button>
+  <button data-t="crystal" data-i18n="Crystal">Crystal</button>
+  <button data-t="fence" data-i18n="Fence">Fence</button>
+  <button data-t="bench" data-i18n="Bench">Bench</button>
+  <button data-t="arch" data-i18n="Arch">Arch</button>
+  <button data-t="path" data-i18n="Path">Path</button>
+  <button id="rotateBtn" class="act" data-i18n="↻ Rotate">↻ Rotate</button>
+  <button id="placeBtn" class="act" data-i18n="Place">Place</button>
+  <button id="undoBtn" class="act" data-i18n="Undo">Undo</button>
 </div>
 <script type="importmap">
 { "imports": {

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { t as L, setLang, translateDom } from './i18n.js';
 
 // ---------- basics ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -205,7 +206,7 @@ let vrm = null, vrmBones = null;
     if (vrmBones.rArm) vrmBones.rArm.rotation.z = -1.15;
     const lb = $('loadBar'); if (lb) lb.parentElement.style.display = 'none';
     applyWardrobe(); // re-attach outfit to the real bones
-    say('Miru has arrived!');
+    say(L('Miru has arrived!'));
   }, xhr => {
     // loading progress bar on the title screen while the avatar streams in
     const lb = $('loadBar');
@@ -314,8 +315,11 @@ function burst(pos, color, count = 20) {
 const SETTINGS_KEY = 'skyseed_settings_v1';
 const settings = Object.assign({
   music: 0.5, sfx: 0.8, quality: 'high', sensitivity: 1, invert: false,
-  contrast: false, bigText: false, tut: {}
+  contrast: false, bigText: false, lang: 'id', tut: {}
 }, (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { return {}; } })());
+setLang(settings.lang);
+translateDom();
+document.documentElement.lang = settings.lang;
 function applyA11y() {
   document.body.classList.toggle('hiContrast', !!settings.contrast);
   document.body.classList.toggle('bigText', !!settings.bigText);
@@ -423,7 +427,7 @@ function applyUnlock(u, announce) {
   u.apply();
   if (!progress.unlocked.includes(u.id)) progress.unlocked.push(u.id);
   if (announce) {
-    say(u.msg); chime(1180);
+    say(L(u.msg)); chime(1180);
     burst(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), 0xfff2a0, 30);
   }
 }
@@ -559,7 +563,7 @@ function checkBiome(x, z) {
   curBiome = b.name;
   if (!progress.biomes.includes(b.name)) {
     progress.biomes.push(b.name);
-    say('You reached the ' + b.name + '!');
+    say(L('You reached the {biome}!', { biome: b.name }));
     chime(900); saveProgress();
   }
 }
@@ -609,9 +613,9 @@ function befriend(slime) {
   heartBurst(pet.g.position); chime(1240);
   if (slime.shiny) {
     progress.shinies = (progress.shinies || 0) + 1;
-    say('A SHINY slime! ' + pet.name + ' joins you — journal updated!');
+    say(L('A SHINY slime! {name} joins you — journal updated!', { name: pet.name }));
   } else {
-    say(pet.name + ' is your friend now!');
+    say(L('{name} is your friend now!', { name: pet.name }));
   }
   savePets(); updateBuddyHud();
 }
@@ -638,9 +642,9 @@ function grantPetXp(n) {
     const need = p.level * 8;
     if (p.xp >= need && p.level < 8) {
       p.xp -= need; p.level++; heartBurst(p.g.position); chime(1320);
-      if (p.level === RIDE_LEVEL) say(p.name + ' is big enough to ride now! Press R next to them.');
-      else if (p.level === 8) { addWings(p); say(p.name + ' grew WINGS! Ride them and hold Space to fly!'); burst(p.g.position, 0xffffff, 30); }
-      else say(p.name + ' grew to Lv ' + p.level + '!');
+      if (p.level === RIDE_LEVEL) say(L('{name} is big enough to ride now! Press R next to them.', { name: p.name }));
+      else if (p.level === 8) { addWings(p); say(L('{name} grew WINGS! Ride them and hold Space to fly!', { name: p.name })); burst(p.g.position, 0xffffff, 30); }
+      else say(L('{name} grew to Lv {lv}!', { name: p.name, lv: p.level }));
     }
   }
   savePets(); updateBuddyHud();
@@ -661,15 +665,15 @@ function nearestPet(maxDist) {
 
 function toggleRide() {
   if (riding) {
-    say('You hop off ' + riding.name + '.');
+    say(L('You hop off {name}.', { name: riding.name }));
     riding = null; chime(520);
     return;
   }
-  if (!pets.length) { say('Make a slime friend first — walk up to one!'); return; }
+  if (!pets.length) { say(L('Make a slime friend first — walk up to one!')); return; }
   const p = nearestPet(4);
-  if (!p) { say('Stand closer to a buddy to ride them.'); return; }
+  if (!p) { say(L('Stand closer to a buddy to ride them.')); return; }
   if (p.level < RIDE_LEVEL) {
-    say(p.name + ' is still small — pet them to Lv ' + RIDE_LEVEL + ' to ride! (Lv ' + p.level + ' now)');
+    say(L('{name} is still small — pet them to Lv {need} to ride! (Lv {lv} now)', { name: p.name, need: RIDE_LEVEL, lv: p.level }));
     chime(300); return;
   }
   riding = p;
@@ -679,9 +683,9 @@ function toggleRide() {
   // one clear message rather than a tip that instantly overwrites the exciting one
   const firstRide = !settings.tut.ride;
   if (firstRide) { settings.tut.ride = true; saveSettings(); }
-  say('You are riding ' + p.name + '!'
-    + (p.wings ? ' Hold Space to FLY!' : '')
-    + (firstRide ? ' (press R to hop off)' : ''));
+  say(L('You are riding {name}!', { name: p.name })
+    + (p.wings ? L(' Hold Space to FLY!') : '')
+    + (firstRide ? L(' (press R to hop off)') : ''));
 }
 const rideBtn = $('rideBtn');
 if (rideBtn) rideBtn.addEventListener('click', toggleRide);
@@ -770,7 +774,7 @@ ghost.rotation.x = Math.PI / 2; ghost.visible = false; scene.add(ghost);
 
 function placeBuild() {
   const tp = targetBuildPoint();
-  if (!tp) { say('Face an island to build there.'); return; }
+  if (!tp) { say(L('Face an island to build there.')); return; }
   const b = { x: +tp.x.toFixed(2), y: +tp.y.toFixed(2), z: +tp.z.toFixed(2), type: buildType, rot: +buildRot.toFixed(3) };
   spawnBuild(b);
   if (!Array.isArray(progress.builds)) progress.builds = [];
@@ -780,7 +784,7 @@ function placeBuild() {
 }
 
 function undoBuild() {
-  if (!Array.isArray(progress.builds) || !progress.builds.length) { say('Nothing to undo yet.'); return; }
+  if (!Array.isArray(progress.builds) || !progress.builds.length) { say(L('Nothing to undo yet.')); return; }
   progress.builds.pop(); saveProgress();
   const g = buildMeshes.pop();
   if (g) { scene.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) o.material.dispose(); }); }
@@ -797,7 +801,7 @@ function toggleBuild(on) {
   $('buildBtn').classList.toggle('on', buildMode);
   $('palette').classList.toggle('on', buildMode);
   if (!buildMode) ghost.visible = false;
-  say(buildMode ? 'Build mode on — face a spot and tap Place!' : 'Back to playing!');
+  say(buildMode ? L('Build mode on — face a spot and tap Place!') : L('Back to playing!'));
 }
 
 // wire the build controls
@@ -849,8 +853,8 @@ function syncServer() {
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     fetch('/api/progress', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ progress }) })
-      .then(r => { if (r.ok) toast('Saved ✓'); else toast('Offline — saved on this device'); })
-      .catch(() => toast('Offline — saved on this device'));
+      .then(r => { if (r.ok) toast(L('Saved ✓')); else toast(L('Offline — saved on this device')); })
+      .catch(() => toast(L('Offline — saved on this device')));
   }, 1200);
 }
 
@@ -885,11 +889,11 @@ fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => {
     const mine = progressScore(progress), theirs = progressScore(u.progress);
     if (theirs >= mine) {
       applyServerProgress(u.progress);
-      say('Welcome back, ' + u.username + '!');
+      say(L('Welcome back, {name}!', { name: u.username }));
     } else {
       // this device is ahead (e.g. played as a guest, then signed up) — carry it up
       saveProgress();
-      say('Welcome, ' + u.username + '! Your progress came with you.');
+      say(L('Welcome, {name}! Your progress came with you.', { name: u.username }));
     }
     renderAccountBar(u);
   } else {
@@ -950,27 +954,27 @@ function qSnapshot() {
 const QUESTS = [
   { give: 'The islands are drifting apart… sparks hold them together! Gather 10 sparks for me.',
     done: 'Wonderful! The isles feel steadier already.', reward: 10,
-    prog: b => Math.min(10, progress.sparks - b.sparks) + '/10 sparks',
+    prog: b => L('{n}/10 sparks', { n: Math.min(10, progress.sparks - b.sparks) }),
     ok: b => progress.sparks - b.sparks >= 10 },
   { give: 'Slimes are lonely little things. Make friends with one — just stand close and be kind.',
     done: 'A new friendship! The sky sings for you.', reward: 10,
-    prog: b => Math.min(1, pets.length - b.pets) + '/1 buddy',
+    prog: b => L('{n}/1 buddy', { n: Math.min(1, pets.length - b.pets) }),
     ok: b => pets.length - b.pets >= 1 },
   { give: 'Some slimes love a playful bop — it makes them giggle! Bop 3 of them.',
     done: 'Hee hee! They loved it.', reward: 10,
-    prog: b => Math.min(3, (progress.bops || 0) - b.bops) + '/3 bops',
+    prog: b => L('{n}/3 bops', { n: Math.min(3, (progress.bops || 0) - b.bops) }),
     ok: b => (progress.bops || 0) - b.bops >= 3 },
   { give: 'Make the isles beautiful again — place 3 decorations anywhere you like. Press B to build!',
     done: 'Oh, how lovely! You have a gardener\'s heart, like Miru.', reward: 10,
-    prog: b => Math.min(3, (progress.builds || []).length - b.builds) + '/3 placed',
+    prog: b => L('{n}/3 placed', { n: Math.min(3, (progress.builds || []).length - b.builds) }),
     ok: b => (progress.builds || []).length - b.builds >= 3 },
   { give: 'Far from here the land changes color. Travel until you discover a new region!',
     done: 'You crossed the sky! Few gardeners wander so far.', reward: 15,
-    prog: b => Math.min(1, progress.biomes.length - b.biomes) + '/1 region',
+    prog: b => L('{n}/1 region', { n: Math.min(1, progress.biomes.length - b.biomes) }),
     ok: b => progress.biomes.length - b.biomes >= 1 },
   { give: 'One last thing… legends speak of glowing moonpetals. Find one and the isles will bloom!',
     done: 'A moonpetal! You did it — you are a true Sky Explorer! Come back any time, little gardener.', reward: 25,
-    prog: b => Math.min(1, (progress.treasures || 0) - b.treasures) + '/1 moonpetal',
+    prog: b => L('{n}/1 moonpetal', { n: Math.min(1, (progress.treasures || 0) - b.treasures) }),
     ok: b => (progress.treasures || 0) - b.treasures >= 1 },
 ];
 
@@ -984,10 +988,10 @@ if (dlgBtn) dlgBtn.addEventListener('click', () => $('dialog').classList.remove(
 
 function questLine() {
   const q = progress.quest;
-  if (q.i >= QUESTS.length) return 'All done — Sky Explorer!';
-  if (!q.base) return 'Talk to the Skykeeper ✦';
+  if (q.i >= QUESTS.length) return L('All done — Sky Explorer!');
+  if (!q.base) return L('Talk to the Skykeeper ✦');
   const Q = QUESTS[q.i];
-  return Q.ok(q.base) ? 'Return to the Skykeeper ✦' : Q.prog(q.base);
+  return Q.ok(q.base) ? L('Return to the Skykeeper ✦') : Q.prog(q.base);
 }
 let lastQLine = '';
 function refreshQuestHud() {
@@ -999,19 +1003,19 @@ function refreshQuestHud() {
 
 function talkSkykeeper() {
   const q = progress.quest;
-  if (q.i >= QUESTS.length) { showDialog('The isles bloom because of you. Play as long as you like, Sky Explorer!'); return; }
+  if (q.i >= QUESTS.length) { showDialog(L('The isles bloom because of you. Play as long as you like, Sky Explorer!')); return; }
   const Q = QUESTS[q.i];
   if (!q.base) {
     q.base = qSnapshot();
-    showDialog(Q.give);
+    showDialog(L(Q.give));
   } else if (Q.ok(q.base)) {
-    showDialog(Q.done + ' (+' + Q.reward + ' sparks)');
+    showDialog(L(Q.done) + L(' (+{n} sparks)', { n: Q.reward }));
     q.i++; q.base = null;
     addSparks(Q.reward);
     burst(skykeeper.position.clone().add(new THREE.Vector3(0, 2, 0)), 0xfff2a0, 24);
     chime(1320);
   } else {
-    showDialog(Q.give + ' (' + Q.prog(q.base) + ')');
+    showDialog(L(Q.give) + ' (' + Q.prog(q.base) + ')');
   }
   saveProgress(); refreshQuestHud();
 }
@@ -1037,8 +1041,8 @@ function careForBuddy() {
   chime(1040);
   if (navigator.vibrate) navigator.vibrate(10);
   grantPetXp(2); // petting helps them grow
-  say(best.name + ' ' + CARE_NAMES[Math.floor(Math.random() * CARE_NAMES.length)] + '! ♥');
-  tip('care', 'Petting your buddies makes them happy and helps them grow!');
+  say(best.name + ' ' + L(CARE_NAMES[Math.floor(Math.random() * CARE_NAMES.length)]) + '! ♥');
+  tip('care', L('Petting your buddies makes them happy and helps them grow!'));
 }
 const careBtn = $('careBtn');
 if (careBtn) careBtn.addEventListener('click', careForBuddy);
@@ -1143,14 +1147,14 @@ function renderWardrobe() {
       const ok = item.need();
       const b = document.createElement('button');
       b.className = 'wrItem' + (cur === item.id ? ' sel' : '') + (ok ? '' : ' locked');
-      b.textContent = ok ? item.name : '🔒 ' + item.name;
-      b.title = ok ? item.name : 'Locked — ' + item.req;
+      b.textContent = ok ? L(item.name) : '🔒 ' + L(item.name);
+      b.title = ok ? L(item.name) : L('Locked — {req}', { req: L(item.req) });
       if (ok) b.addEventListener('click', () => { setWardrobe(slot, item.id); renderWardrobe(); });
       else { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
       box.appendChild(b);
       if (!ok) {
         const hint = document.createElement('span');
-        hint.className = 'wrReq'; hint.textContent = item.req;
+        hint.className = 'wrReq'; hint.textContent = L(item.req);
         box.appendChild(hint);
       }
     }
@@ -1285,7 +1289,7 @@ $('startBtn').addEventListener('click', () => {
   applyQuality();
   startMusic();
   chime(660);
-  say(isTouch ? 'Drag the right side to look around!' : 'Click the world to grab the camera!');
+  say(isTouch ? L('Drag the right side to look around!') : L('Click the world to grab the camera!'));
 });
 
 // ---------- pause + settings menu ----------
@@ -1324,6 +1328,17 @@ function bindSetting(id, apply) {
   if (con) { con.checked = settings.contrast; con.addEventListener('change', () => { settings.contrast = con.checked; applyA11y(); saveSettings(); }); }
   const big = $('setBigText');
   if (big) { big.checked = settings.bigText; big.addEventListener('change', () => { settings.bigText = big.checked; applyA11y(); saveSettings(); }); }
+  const lng = $('setLang');
+  if (lng) {
+    lng.value = settings.lang;
+    lng.addEventListener('change', () => {
+      settings.lang = lng.value; setLang(lng.value); saveSettings();
+      document.documentElement.lang = lng.value;
+      translateDom();
+      refreshGoal(); updateBuddyHud(); lastQLine = ''; refreshQuestHud();
+      setBuildType(buildType); renderWardrobe();
+    });
+  }
 }
 applyA11y();
 
@@ -1355,7 +1370,7 @@ function doPunch(t) {
       const bops = progress.bops;
       const bopEl = $('cBop'); if (bopEl) bopEl.textContent = bops;
       chime(1040);
-      say(['Boing! Got one!', 'Slime bopped!', 'Pow! It giggled away.'][bops % 3]);
+      say(L(['Boing! Got one!', 'Slime bopped!', 'Pow! It giggled away.'][bops % 3]));
     }
   }
 }
@@ -1373,7 +1388,7 @@ function governFps(dt) {
       renderer.setPixelRatio(1);
       renderer.shadowMap.enabled = false;
       sun.castShadow = false;
-      say('Smoothing things out for your device!');
+      say(L('Smoothing things out for your device!'));
     }
   }
 }
@@ -1496,7 +1511,7 @@ function animate() {
         isl.found = true;
         if (!progress.wonders.includes(isl.key)) {
           progress.wonders.push(isl.key);
-          say('You found a Great Tree! Wonder #' + progress.wonders.length + '!');
+          say(L('You found a Great Tree! Wonder #{n}!', { n: progress.wonders.length }));
           chime(1180); burst(new THREE.Vector3(isl.x, isl.y + 9, isl.z), 0xbfffcf, 30);
           saveProgress();
         }
@@ -1538,7 +1553,7 @@ function animate() {
     if (player.position.y < -25) {
       player.position.copy(spawn).add(new THREE.Vector3(0, 6, 0));
       vel.set(0, 0, 0);
-      say('Whoops! The wind carried you back.');
+      say(L('Whoops! The wind carried you back.'));
       chime(330);
     }
 
@@ -1605,7 +1620,7 @@ function animate() {
         collect.splice(i, 1);
         if (c.kind === 'petal') {
           progress.treasures = (progress.treasures || 0) + 1;
-          say('A moonpetal! Treasure #' + progress.treasures + ' for your journal!');
+          say(L('A moonpetal! Treasure #{n} for your journal!', { n: progress.treasures }));
           chime(1240);
         } else {
           chime(c.kind === 'seed' ? 880 : c.kind === 'ring' ? 740 : 990);
@@ -1621,7 +1636,7 @@ function animate() {
     const dK = Math.hypot(player.position.x - skykeeper.position.x, player.position.z - skykeeper.position.z);
     const nearK = dK < 3.2;
     if (talkBtn) talkBtn.style.display = nearK ? 'flex' : 'none';
-    if (nearK) tip('keeper', isTouch ? 'Tap TALK to speak with the Skykeeper!' : 'Press E to talk to the Skykeeper!');
+    if (nearK) tip('keeper', isTouch ? L('Tap TALK to speak with the Skykeeper!') : L('Press E to talk to the Skykeeper!'));
     if (interactPressed) { if (nearK) talkSkykeeper(); else careForBuddy(); }
     interactPressed = false;
     if (petPressed) { careForBuddy(); petPressed = false; }
@@ -1633,15 +1648,15 @@ function animate() {
       if (np) rideBtn.textContent = riding ? 'HOP OFF' : (np.level >= RIDE_LEVEL ? 'RIDE' : 'Lv' + np.level + '/' + RIDE_LEVEL);
     }
     // nudge toward the wings goal only for buddies that aren't there yet
-    if (riding && !riding.wings) tip('wings', 'Keep petting ' + riding.name + ' — at Lv 8 they grow wings and can fly!');
+    if (riding && !riding.wings) tip('wings', L('Keep petting {name} — at Lv 8 they grow wings and can fly!', { name: riding.name }));
 
     // contextual first-run tips
-    if (progress.sparks >= 6) tip('build', 'Press B (or the Build button) to decorate your island!');
-    if (airTime > 0.7) tip('glide', 'Hold jump while falling to glide gently down!');
+    if (progress.sparks >= 6) tip('build', L('Press B (or the Build button) to decorate your island!'));
+    if (airTime > 0.7) tip('glide', L('Hold jump while falling to glide gently down!'));
     for (const s of slimes) {
       if (!s.alive) continue;
       if (Math.hypot(s.g.position.x - player.position.x, s.g.position.z - player.position.z) < 4.5) {
-        tip('slime', 'Stand close to a slime and stay kind — it will become your friend!');
+        tip('slime', L('Stand close to a slime and stay kind — it will become your friend!'));
         break;
       }
     }

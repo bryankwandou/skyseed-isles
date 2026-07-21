@@ -5,11 +5,21 @@
   "type": "module",
   "description": "Skyseed Isles — endless kid-first 3D platformer with accounts and saved progress.",
   "scripts": {
-    "setup-db": "node scripts/setup-db.mjs"
+    "setup-db": "node scripts/setup-db.mjs",
+    "reset-parent": "node scripts/reset-parent-password.mjs",
+    "serve": "node node_modules/http-server/bin/http-server -p 5610 -c-1 --silent .",
+    "test:browser": "node test/browser.test.mjs",
+    "test:i18n": "node test/i18n.test.mjs",
+    "test:vrm": "node test/vrm.test.mjs miru.vrm",
+    "check": "node --input-type=module --check < play/game.js && node --input-type=module --check < play/i18n.js && node --check play/account.js && node --check play/sw.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "puppeteer-core": "^23.0.0"
   }
 }
