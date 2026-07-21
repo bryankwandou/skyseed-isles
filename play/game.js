@@ -862,12 +862,12 @@ function renderAccountBar(u) {
   const bar = $('accountBar');
   if (!bar) return;
   if (u && u.username) {
-    bar.innerHTML = 'Hi, <b></b> · <a href="#" id="logoutLink">Log out</a>';
+    bar.innerHTML = L('Hi,') + ' <b></b> · <a href="#" id="logoutLink">' + L('Log out') + '</a>';
     bar.querySelector('b').textContent = u.username;
     const ll = $('logoutLink');
     if (ll) ll.addEventListener('click', e => { e.preventDefault(); fetch('/api/logout', { method: 'POST' }).then(() => location.reload()); });
   } else {
-    bar.innerHTML = '<a href="./account.html">Log in / Sign up</a> to save across devices';
+    bar.innerHTML = '<a href="./account.html">' + L('Log in / Sign up') + '</a> ' + L('to save across devices');
   }
 }
 
