@@ -77,6 +77,19 @@ $('registerForm').addEventListener('submit', async e => {
   setTimeout(() => location.href = './index.html', 800);
 });
 
+// Enable the Google buttons only when the server says OAuth is configured.
+fetch('/api/google', { method: 'HEAD' }).then(r => {
+  if (r.status === 503) return; // not set up yet — leave them as "coming soon"
+  document.querySelectorAll('.google').forEach(btn => {
+    btn.disabled = false;
+    btn.removeAttribute('aria-disabled');
+    btn.style.cursor = 'pointer';
+    const soon = btn.querySelector('.soon');
+    if (soon) soon.remove();
+    btn.addEventListener('click', () => { location.href = '/api/google'; });
+  });
+}).catch(() => {});
+
 // Simple in-page policy popups (kept short and honest).
 $('openTerms').addEventListener('click', e => {
   e.preventDefault();

@@ -220,8 +220,14 @@ Legend: `[x]` done + verified · `[ ]` open · `[~]` in progress · `[!]` blocke
 - [x] P6: PWA — manifest.webmanifest + service worker (network-first shell cache, API never cached, GET only) + theme/apple meta tags → installable on phones
 - [x] E key is context-aware: talk to the Skykeeper when near, pet a buddy otherwise
 
-## 9. Next up
-- [ ] Cosmetic wardrobe for Miru
-- [ ] Google sign-in
-- [ ] Password reset via email
-- [ ] Compressed VRM for faster first load
+## 9. Final list clear-out (this pass)
+- [x] **Cosmetic wardrobe** — 👒 button / K key. 3 hats (Flower Crown, Star Hat, Party Hat) + 2 capes (Sky, Starlight), each unlocked by a real milestone (sparks, Great Tree, quests, regions, moonpetal). Locked items show what to do. Attaches to the VRM head/spine bones (survives the avatar swap) and falls back to the primitive rig. Saved locally + server.
+- [x] **Parent-managed password reset** — chosen over email reset because children have no email address. Parent clicks "Reset password" in the family dashboard; PATCH /api/family re-verifies admin against the DB, enforces 8+ chars, bcrypt-hashes, and refuses to touch another parent's password.
+- [x] **Google sign-in** — full OAuth 2.0 authorization-code flow implemented in api/google.js (verifies the id_token with Google, checks `aud` + `email_verified`, creates or links the account). Returns 503 and the UI stays "coming soon" until GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are set; the button auto-enables the moment they are.
+- [x] **VRM compressed 11.48 MB → 6.71 MB (−41.6%)** — standard gltf-transform pipelines were tested first and **rejected**: they silently dropped the VRM extension (verified: avatar failed to load). Shipped a custom GLB texture-only re-encode that rewrites just the image bufferViews, leaving the VRM extension, rig and meshes byte-identical. Verified: 6/6 humanoid bones, 9/9 textured meshes — identical to the original.
+
+## 10. Next up
+- [ ] Buddy feeding (berries as a second care action)
+- [ ] More wardrobe slots (shoes, wings)
+- [ ] Seasonal events
+- [ ] Local co-op experiment

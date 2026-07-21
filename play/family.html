@@ -26,7 +26,13 @@
     padding:6px 12px; border-radius:9px; cursor:pointer;
   }
   .del:hover { background:#fff0f3; }
-  .del:focus-visible, a:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
+  .pw {
+    border:1.5px solid #cfe0f3; background:#fff; color:#3a6fb0; font-weight:700; font-size:12px;
+    padding:6px 12px; border-radius:9px; cursor:pointer; margin-right:6px;
+  }
+  .pw:hover { background:#f2f8ff; }
+  .acts { white-space:nowrap; }
+  .del:focus-visible, .pw:focus-visible, a:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
   #status { margin:14px 0; font-size:14px; font-weight:600; }
   #status.err { color:#d64b6a; }
   .totals { margin-top:14px; font-size:14px; color:var(--muted); }
@@ -70,7 +76,10 @@ async function load() {
       <td><b>${u.quests}</b>/6</td>
       <td><b>${u.biomes}</b></td>
       <td>${new Date(u.updated_at).toLocaleDateString()}</td>
-      <td>${u.is_admin ? '' : `<button class="del" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button>`}</td>
+      <td class="acts">
+        <button class="pw" data-id="${u.id}" data-name="${esc(u.username)}">Reset password</button>
+        ${u.is_admin ? '' : `<button class="del" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button>`}
+      </td>
     </tr>`).join('');
 
   $('content').innerHTML = `
@@ -82,6 +91,19 @@ async function load() {
       family total: ${kids.reduce((a, u) => a + u.sparks, 0)} sparks,
       ${kids.reduce((a, u) => a + u.buddies, 0)} buddies,
       ${kids.reduce((a, u) => a + u.builds, 0)} decorations</p>`;
+
+  document.querySelectorAll('.pw').forEach(btn => btn.addEventListener('click', async () => {
+    const name = btn.dataset.name;
+    const pw = prompt('New password for "' + name + '" (at least 8 characters):');
+    if (pw === null) return;
+    if (pw.length < 8) { alert('That password is too short — use at least 8 characters.'); return; }
+    const r = await fetch('/api/family', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: +btn.dataset.id, password: pw })
+    });
+    if (r.ok) alert('Password updated for "' + name + '". Tell them their new password.');
+    else { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not change the password.'); }
+  }));
 
   document.querySelectorAll('.del').forEach(btn => btn.addEventListener('click', async () => {
     const name = btn.dataset.name;
