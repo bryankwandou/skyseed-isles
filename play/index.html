@@ -193,6 +193,12 @@
     user-select:none; touch-action:none; cursor:pointer;
   }
   #buildBtn.on { background:#ffb24d; border-color:#fff; }
+  #rideBtn {
+    position:fixed; z-index:22; right:24px; top:204px; width:64px; height:44px;
+    border-radius:14px; border:2px solid rgba(255,255,255,.7); background:rgba(140,220,180,.6);
+    color:#0f3f2e; font-size:13px; font-weight:800; display:none; align-items:center; justify-content:center;
+    user-select:none; touch-action:none; cursor:pointer;
+  }
   #careBtn {
     position:fixed; z-index:22; right:24px; top:150px; width:64px; height:44px;
     border-radius:14px; border:2px solid rgba(255,255,255,.7); background:rgba(255,142,184,.55);
@@ -300,12 +306,13 @@
 </div>
 <div id="accountBar">…</div>
 <div id="msg"></div>
-<div id="help">Click world to grab camera · WASD run · Space jump · befriend slimes by standing close · P to pet a buddy · E to talk · B build (R rotates) · J journal · F bop</div>
+<div id="help">WASD run · Space jump · stand close to a slime to befriend it · P pet · <b>R ride your buddy</b> · E talk · B build (R rotates in build) · J journal · K wardrobe · F bop</div>
 <div id="stick"><div id="knob"></div></div>
 <button class="tbtn" id="jumpBtn" aria-label="Jump">JUMP</button>
 <button class="tbtn" id="punchBtn" aria-label="Punch" style="right:120px; bottom:44px;">POW</button>
 <button id="buildBtn" aria-label="Toggle build mode">Build</button>
 <button id="careBtn" aria-label="Pet your buddy">♥ Pet</button>
+<button id="rideBtn" aria-label="Ride your buddy">RIDE</button>
 <div id="palette" aria-label="Building palette">
   <button data-t="tree" class="sel">Tree</button>
   <button data-t="flower">Flower</button>

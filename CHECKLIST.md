@@ -226,7 +226,15 @@ Legend: `[x]` done + verified · `[ ]` open · `[~]` in progress · `[!]` blocke
 - [x] **Google sign-in** — full OAuth 2.0 authorization-code flow implemented in api/google.js (verifies the id_token with Google, checks `aud` + `email_verified`, creates or links the account). Returns 503 and the UI stays "coming soon" until GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are set; the button auto-enables the moment they are.
 - [x] **VRM compressed 11.48 MB → 6.71 MB (−41.6%)** — standard gltf-transform pipelines were tested first and **rejected**: they silently dropped the VRM extension (verified: avatar failed to load). Shipped a custom GLB texture-only re-encode that rewrites just the image bufferViews, leaving the VRM extension, rig and meshes byte-identical. Verified: 6/6 humanoid bones, 9/9 textured meshes — identical to the original.
 
-## 10. Next up
+## 10. 🐉 Buddy riding + wings (the surprise)
+The emotional payoff for the care system — and the honest answer to "my child prefers RDR's horse".
+- [x] **Ride your buddy** — press R (or the RIDE button) next to a buddy at Lv 4+. You sit on them, they carry you, movement is 1.5× faster.
+- [x] **Wings at Lv 8** — a buddy you raised to max level grows wings permanently (kept between sessions). Riding a winged buddy: 1.85× speed and **hold Space to fly**, with a gentle climb cap so a child never loses sight of the ground.
+- [x] Mount reads correctly: buddy scales up, bobs while running, wings flap faster in the air, and softens every landing.
+- [x] Progressive UI: the button shows "Lv2/4" while the buddy is too small, "RIDE" when ready, "HOP OFF" while mounted — so the goal is always visible.
+- [x] Ties the loop shut: pet your buddy → they level → they carry you → they fly.
+
+## 11. Next up
 - [ ] Buddy feeding (berries as a second care action)
 - [ ] More wardrobe slots (shoes, wings)
 - [ ] Seasonal events

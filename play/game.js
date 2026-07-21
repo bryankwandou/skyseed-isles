@@ -589,6 +589,7 @@ function makePet(color, level, name) {
   scene.add(g);
   const pet = { g, blob, color, level: level || 1, xp: 0, name: name || PET_NAMES[Math.floor(Math.random() * PET_NAMES.length)], phase: Math.random() * 6 };
   pets.push(pet);
+  if (pet.level >= 8) addWings(pet); // a fully-raised buddy keeps its wings between sessions
   return pet;
 }
 
@@ -615,15 +616,75 @@ function befriend(slime) {
   savePets(); updateBuddyHud();
 }
 
+// A buddy you have cared for grows wings at max level — the payoff for petting.
+function addWings(pet) {
+  if (pet.wings) return;
+  const w = new THREE.Group();
+  const mat = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+  [-1, 1].forEach(s => {
+    const wing = new THREE.Mesh(new THREE.CircleGeometry(0.55, 12, 0, Math.PI), mat);
+    wing.position.set(0.34 * s, 0.28, -0.16);
+    wing.rotation.set(-0.35, s * 0.9, 0);
+    w.add(wing);
+  });
+  pet.g.add(w);
+  pet.wings = w;
+}
+
 function grantPetXp(n) {
   if (!pets.length) return;
   for (const p of pets) {
     p.xp += n;
     const need = p.level * 8;
-    if (p.xp >= need && p.level < 8) { p.xp -= need; p.level++; heartBurst(p.g.position); chime(1320); say(p.name + ' grew to Lv ' + p.level + '!'); }
+    if (p.xp >= need && p.level < 8) {
+      p.xp -= need; p.level++; heartBurst(p.g.position); chime(1320);
+      if (p.level === RIDE_LEVEL) say(p.name + ' is big enough to ride now! Press R next to them.');
+      else if (p.level === 8) { addWings(p); say(p.name + ' grew WINGS! Ride them and hold Space to fly!'); burst(p.g.position, 0xffffff, 30); }
+      else say(p.name + ' grew to Lv ' + p.level + '!');
+    }
   }
   savePets(); updateBuddyHud();
 }
+
+// ---------- riding: your buddy becomes your mount ----------
+const RIDE_LEVEL = 4;
+let riding = null, rideLift = 0;
+
+function nearestPet(maxDist) {
+  let best = null, bd = maxDist;
+  for (const p of pets) {
+    const d = Math.hypot(p.g.position.x - player.position.x, p.g.position.z - player.position.z);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
+function toggleRide() {
+  if (riding) {
+    say('You hop off ' + riding.name + '.');
+    riding = null; chime(520);
+    return;
+  }
+  if (!pets.length) { say('Make a slime friend first — walk up to one!'); return; }
+  const p = nearestPet(4);
+  if (!p) { say('Stand closer to a buddy to ride them.'); return; }
+  if (p.level < RIDE_LEVEL) {
+    say(p.name + ' is still small — pet them to Lv ' + RIDE_LEVEL + ' to ride! (Lv ' + p.level + ' now)');
+    chime(300); return;
+  }
+  riding = p;
+  p.careBounce = 1;
+  heartBurst(p.g.position); chime(1180);
+  burst(p.g.position.clone().add(new THREE.Vector3(0, 1, 0)), 0xfff2a0, 22);
+  // one clear message rather than a tip that instantly overwrites the exciting one
+  const firstRide = !settings.tut.ride;
+  if (firstRide) { settings.tut.ride = true; saveSettings(); }
+  say('You are riding ' + p.name + '!'
+    + (p.wings ? ' Hold Space to FLY!' : '')
+    + (firstRide ? ' (press R to hop off)' : ''));
+}
+const rideBtn = $('rideBtn');
+if (rideBtn) rideBtn.addEventListener('click', toggleRide);
 
 // bring back buddies made in a past session
 if (Array.isArray(progress.pets)) for (const p of progress.pets) makePet(p.color, p.level, p.name);
@@ -1098,6 +1159,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyF') punchPressed = true;
   if (e.code === 'KeyE') interactPressed = true;
   if (e.code === 'KeyP') petPressed = true;
+  if (e.code === 'KeyR' && !buildMode) toggleRide();
   if (e.code === 'KeyJ') { const j = $('journal'); if (j && j.classList.contains('on')) closeJournal(); else openJournal(); }
   if (e.code === 'KeyK') { const w = $('wardrobe'); if (w && w.classList.contains('on')) closeWardrobe(); else openWardrobe(); }
 });
@@ -1346,7 +1408,9 @@ function animate() {
     if (len > 1) { ix /= len; iz /= len; }
     running = len > 0.05;
 
-    const speed = (keys.ShiftLeft || keys.ShiftRight) ? SPRINT : WALK;
+    // riding is faster, and a winged buddy is faster still
+    const rideBoost = riding ? (riding.wings ? 1.85 : 1.5) : 1;
+    const speed = ((keys.ShiftLeft || keys.ShiftRight) ? SPRINT : WALK) * rideBoost;
     const sy = Math.sin(camYaw), cy = Math.cos(camYaw);
     vel.x = (ix * cy - iz * sy) * speed;
     vel.z = (-ix * sy - iz * cy) * speed;
@@ -1373,7 +1437,21 @@ function animate() {
     punchPressed = false;
 
     vel.y += GRAV * dt;
-    if (vel.y < 0 && keys.Space) vel.y = Math.max(vel.y, GLIDE);
+    if (riding && riding.wings && keys.Space) {
+      // winged buddy: hold jump to fly. A soft ceiling eases the climb to nothing near the top
+      // so a child drifts to a gentle hover instead of vanishing into empty sky.
+      const gh = groundHeight(player.position.x, player.position.z);
+      const floor = gh > -Infinity ? gh : 0;
+      const room = Math.max(0, 1 - (player.position.y - floor) / 34);
+      vel.y = Math.min(vel.y + 46 * dt * room, 8.5 * Math.max(0.12, room));
+      if (Math.random() < 0.25) burst(riding.g.position.clone(), 0xffffff, 2);
+    } else if (vel.y < 0 && keys.Space) {
+      vel.y = Math.max(vel.y, riding ? GLIDE * 0.55 : GLIDE); // a mount always softens the fall
+    }
+
+    // sit height on the mount, eased so mounting looks smooth
+    const wantLift = riding ? 0.72 + (riding.level - 1) * 0.05 : 0;
+    rideLift += (wantLift - rideLift) * Math.min(1, dt * 8);
 
     player.position.x += vel.x * dt;
     player.position.z += vel.z * dt;
@@ -1491,6 +1569,8 @@ function animate() {
       }
       tails.forEach((tail, i) => { tail.rotation.x = Math.sin(t * 3 + i) * 0.18 - (onGround ? 0 : 0.5); });
     }
+    // sit on top of your buddy while riding (applied after the animation sets body.y)
+    body.position.y += rideLift;
 
     // collectibles (descending so splice-on-pickup is safe)
     const head = player.position.clone().add(new THREE.Vector3(0, 1.2, 0));
@@ -1526,6 +1606,15 @@ function animate() {
     if (interactPressed) { if (nearK) talkSkykeeper(); else careForBuddy(); }
     interactPressed = false;
     if (petPressed) { careForBuddy(); petPressed = false; }
+
+    // show the RIDE button when a buddy is close enough to hop on
+    if (rideBtn) {
+      const np = riding ? riding : nearestPet(4);
+      rideBtn.style.display = np ? 'flex' : 'none';
+      if (np) rideBtn.textContent = riding ? 'HOP OFF' : (np.level >= RIDE_LEVEL ? 'RIDE' : 'Lv' + np.level + '/' + RIDE_LEVEL);
+    }
+    // nudge toward the wings goal only for buddies that aren't there yet
+    if (riding && !riding.wings) tip('wings', 'Keep petting ' + riding.name + ' — at Lv 8 they grow wings and can fly!');
 
     // contextual first-run tips
     if (progress.sparks >= 6) tip('build', 'Press B (or the Build button) to decorate your island!');
@@ -1566,6 +1655,21 @@ function animate() {
     if (trail.length > 260) trail.pop();
     for (let i = 0; i < pets.length; i++) {
       const p = pets[i];
+      // the buddy you are riding carries you instead of trailing behind
+      if (p === riding) {
+        p.g.position.set(player.position.x, player.position.y + 0.1, player.position.z);
+        p.g.rotation.y = body.rotation.y;
+        p.g.scale.setScalar(1.5 + (p.level - 1) * 0.09);
+        const bob = Math.abs(Math.sin(t * 6)) * (running ? 0.14 : 0.05);
+        p.g.position.y += bob;
+        p.blob.scale.set(1 + bob, 0.82 - bob * 0.5, 1 + bob);
+        if (p.wings) {
+          const flap = Math.sin(t * (onGround ? 6 : 16));
+          p.wings.children[0].rotation.y = 0.9 + flap * 0.5;
+          p.wings.children[1].rotation.y = -0.9 - flap * 0.5;
+        }
+        continue;
+      }
       const target = trail[Math.min(trail.length - 1, (i + 1) * 18)] || player.position;
       p.g.position.x += (target.x - p.g.position.x) * Math.min(1, dt * 6);
       p.g.position.z += (target.z - p.g.position.z) * Math.min(1, dt * 6);
