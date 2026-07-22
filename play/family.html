@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Skyseed Isles — Family Dashboard</title>
+<title>Skyseed Isles — Dasbor Keluarga</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>" />
 <style>
   :root { --ink:#1d2433; --muted:#5b6b82; --line:#d6e2ee; --brand:#a06bf0; }
@@ -60,32 +60,32 @@
 </head>
 <body>
 <div class="wrap"><div class="card">
-  <h1>Family Dashboard</h1>
-  <p class="sub">Watch all your children's progress in one place. Only parent accounts can see this page.</p>
-  <div id="status">Checking who you are…</div>
+  <h1>Dasbor Keluarga</h1>
+  <p class="sub">Pantau kemajuan semua anak di satu tempat. Hanya akun orang tua yang bisa melihat halaman ini.</p>
+  <div id="status">Memeriksa identitas Anda…</div>
   <div id="addBox" hidden>
-    <h2 style="font-size:16px;margin-bottom:4px">Add a child</h2>
-    <p class="sub" style="margin-bottom:10px">Children never enter an email — just a username and a password you both remember.</p>
+    <h2 style="font-size:16px;margin-bottom:4px">Tambah anak</h2>
+    <p class="sub" style="margin-bottom:10px">Anak tidak perlu memasukkan email — cukup nama pengguna dan kata sandi yang Anda berdua ingat.</p>
     <form id="addForm">
-      <label for="ch_user">Child's username</label>
+      <label for="ch_user">Nama pengguna anak</label>
       <input id="ch_user" type="text" autocomplete="off" pattern="[A-Za-z0-9_]{3,20}" required />
-      <label for="ch_pass">Password (min 8 characters)</label>
+      <label for="ch_pass">Kata sandi (min. 8 karakter)</label>
       <input id="ch_pass" type="text" autocomplete="off" minlength="8" required />
-      <button type="submit" id="addBtn">Create account</button>
+      <button type="submit" id="addBtn">Buat akun</button>
       <span id="addMsg"></span>
     </form>
     <details style="margin-top:12px">
-      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brand)">Add several children at once</summary>
-      <p class="sub" style="margin:8px 0">One child per line, as <code>username password</code>. Example:<br>
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brand)">Tambah beberapa anak sekaligus</summary>
+      <p class="sub" style="margin:8px 0">Satu anak per baris, format <code>namapengguna katasandi</code>. Contoh:<br>
         <code>budi Rahasia123</code><br><code>siti Bintang456</code></p>
       <textarea id="bulkBox" rows="6" placeholder="budi Rahasia123&#10;siti Bintang456"
         style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px"></textarea>
-      <button id="bulkBtn" style="margin-top:8px;border:none;cursor:pointer;color:#fff;font-weight:700;font-size:14px;padding:10px 18px;border-radius:10px;background:linear-gradient(135deg,#8fd0f5,#a06bf0)">Create all</button>
+      <button id="bulkBtn" style="margin-top:8px;border:none;cursor:pointer;color:#fff;font-weight:700;font-size:14px;padding:10px 18px;border-radius:10px;background:linear-gradient(135deg,#8fd0f5,#a06bf0)">Buat semua</button>
       <div id="bulkMsg" style="margin-top:8px;font-size:13px;white-space:pre-line"></div>
     </details>
   </div>
   <div id="content"></div>
-  <div class="foot"><a href="./index.html">← Back to the game</a> · <a href="./account.html">Account</a></div>
+  <div class="foot"><a href="./index.html">← Kembali ke permainan</a> · <a href="./account.html">Akun</a></div>
 </div></div>
 <script>
 const $ = id => document.getElementById(id);
@@ -93,21 +93,21 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>
 
 async function load() {
   const me = await fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null);
-  if (!me) { $('status').textContent = 'Please log in with the parent account first.'; $('status').className = 'err'; return; }
-  if (!me.isAdmin) { $('status').textContent = 'This page is for the parent account only.'; $('status').className = 'err'; return; }
+  if (!me) { $('status').textContent = 'Silakan masuk dengan akun orang tua dulu.'; $('status').className = 'err'; return; }
+  if (!me.isAdmin) { $('status').textContent = 'Halaman ini hanya untuk akun orang tua.'; $('status').className = 'err'; return; }
 
   const r = await fetch('/api/family');
-  if (!r.ok) { $('status').textContent = 'Could not load the family list.'; $('status').className = 'err'; return; }
+  if (!r.ok) { $('status').textContent = 'Gagal memuat daftar keluarga.'; $('status').className = 'err'; return; }
   const { users } = await r.json();
-  $('status').textContent = 'Logged in as ' + me.username + ' (parent)';
+  $('status').textContent = 'Masuk sebagai ' + me.username + ' (orang tua)';
   $('addBox').hidden = false;
 
-  if (!users.length) { $('content').innerHTML = '<div class="empty">No accounts yet.</div>'; return; }
+  if (!users.length) { $('content').innerHTML = '<div class="empty">Belum ada akun.</div>'; return; }
 
   const kids = users.filter(u => !u.is_admin);
   const rows = users.map(u => `
     <tr>
-      <td><b>${esc(u.username)}</b> ${u.is_admin ? '<span class="tag">parent</span>' : ''}</td>
+      <td><b>${esc(u.username)}</b> ${u.is_admin ? '<span class="tag">ortu</span>' : ''}</td>
       <td><b>${u.sparks}</b></td>
       <td><b>${u.buddies}</b></td>
       <td><b>${u.builds}</b></td>
@@ -115,58 +115,58 @@ async function load() {
       <td><b>${u.biomes}</b></td>
       <td>${new Date(u.updated_at).toLocaleDateString()}</td>
       <td class="acts">
-        <button class="pw" data-id="${u.id}" data-name="${esc(u.username)}">Reset password</button>
-        ${u.is_admin ? '' : `<button class="del" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button>`}
+        <button class="pw" data-id="${u.id}" data-name="${esc(u.username)}">Ubah sandi</button>
+        ${u.is_admin ? '' : `<button class="del" data-id="${u.id}" data-name="${esc(u.username)}">Hapus</button>`}
       </td>
     </tr>`).join('');
 
   $('content').innerHTML = `
     <table>
-      <thead><tr><th>Child</th><th>Sparks</th><th>Buddies</th><th>Builds</th><th>Quests</th><th>Regions</th><th>Last played</th><th></th></tr></thead>
+      <thead><tr><th>Anak</th><th>Kilau</th><th>Teman</th><th>Bangunan</th><th>Misi</th><th>Wilayah</th><th>Terakhir main</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <p class="totals">${kids.length} child account${kids.length === 1 ? '' : 's'} ·
-      family total: ${kids.reduce((a, u) => a + u.sparks, 0)} sparks,
-      ${kids.reduce((a, u) => a + u.buddies, 0)} buddies,
-      ${kids.reduce((a, u) => a + u.builds, 0)} decorations</p>`;
+    <p class="totals">${kids.length} akun anak ·
+      total keluarga: ${kids.reduce((a, u) => a + u.sparks, 0)} kilau,
+      ${kids.reduce((a, u) => a + u.buddies, 0)} teman,
+      ${kids.reduce((a, u) => a + u.builds, 0)} hiasan</p>`;
 
   document.querySelectorAll('.pw').forEach(btn => btn.addEventListener('click', async () => {
     const name = btn.dataset.name;
-    const pw = prompt('New password for "' + name + '" (at least 8 characters):');
+    const pw = prompt('Kata sandi baru untuk "' + name + '" (minimal 8 karakter):');
     if (pw === null) return;
-    if (pw.length < 8) { alert('That password is too short — use at least 8 characters.'); return; }
+    if (pw.length < 8) { alert('Kata sandi terlalu pendek — pakai minimal 8 karakter.'); return; }
     const r = await fetch('/api/family', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: +btn.dataset.id, password: pw })
     });
-    if (r.ok) alert('Password updated for "' + name + '". Tell them their new password.');
-    else { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not change the password.'); }
+    if (r.ok) alert('Kata sandi "' + name + '" diperbarui. Beri tahu kata sandi barunya.');
+    else { const d = await r.json().catch(() => ({})); alert(d.error || 'Gagal mengubah kata sandi.'); }
   }));
 
   document.querySelectorAll('.del').forEach(btn => btn.addEventListener('click', async () => {
     const name = btn.dataset.name;
-    if (!confirm('Delete "' + name + '" and ALL their progress? This cannot be undone.')) return;
-    if (!confirm('Are you really sure? "' + name + '" will lose everything.')) return;
+    if (!confirm('Hapus "' + name + '" beserta SEMUA kemajuannya? Tindakan ini tidak bisa dibatalkan.')) return;
+    if (!confirm('Anda benar-benar yakin? "' + name + '" akan kehilangan semuanya.')) return;
     const dr = await fetch('/api/family', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: +btn.dataset.id })
     });
-    if (dr.ok) load(); else { const d = await dr.json().catch(() => ({})); alert(d.error || 'Could not delete.'); }
+    if (dr.ok) load(); else { const d = await dr.json().catch(() => ({})); alert(d.error || 'Gagal menghapus.'); }
   }));
 }
 $('addForm').addEventListener('submit', async e => {
   e.preventDefault();
   const msg = $('addMsg'), btn = $('addBtn');
   const username = $('ch_user').value.trim(), password = $('ch_pass').value;
-  msg.className = ''; msg.textContent = 'Creating…'; btn.disabled = true;
+  msg.className = ''; msg.textContent = 'Membuat…'; btn.disabled = true;
   const r = await fetch('/api/family', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
   });
   btn.disabled = false;
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) { msg.className = 'err'; msg.textContent = d.error || 'Could not create the account.'; return; }
-  msg.className = 'ok'; msg.textContent = 'Created "' + d.username + '".';
+  if (!r.ok) { msg.className = 'err'; msg.textContent = d.error || 'Gagal membuat akun.'; return; }
+  msg.className = 'ok'; msg.textContent = 'Akun "' + d.username + '" dibuat.';
   $('ch_user').value = ''; $('ch_pass').value = '';
   load();
 });
@@ -174,18 +174,18 @@ $('addForm').addEventListener('submit', async e => {
 // Bulk add — paste all twelve children at once.
 $('bulkBtn').addEventListener('click', async () => {
   const lines = $('bulkBox').value.split('\n').map(l => l.trim()).filter(Boolean);
-  if (!lines.length) { $('bulkMsg').textContent = 'Nothing to add yet.'; return; }
+  if (!lines.length) { $('bulkMsg').textContent = 'Belum ada yang ditambahkan.'; return; }
   const btn = $('bulkBtn'); btn.disabled = true;
   const out = [];
   for (const line of lines) {
     const [username, password] = line.split(/\s+/);
-    if (!username || !password) { out.push('✗ ' + line + ' — needs a username and a password'); continue; }
+    if (!username || !password) { out.push('✗ ' + line + ' — perlu nama pengguna dan kata sandi'); continue; }
     const r = await fetch('/api/family', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
     const d = await r.json().catch(() => ({}));
-    out.push(r.ok ? '✓ ' + username + ' created' : '✗ ' + username + ' — ' + (d.error || 'failed'));
+    out.push(r.ok ? '✓ ' + username + ' dibuat' : '✗ ' + username + ' — ' + (d.error || 'gagal'));
     $('bulkMsg').textContent = out.join('\n');
   }
   btn.disabled = false;
