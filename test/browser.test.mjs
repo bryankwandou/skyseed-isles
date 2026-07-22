@@ -196,12 +196,12 @@ try {
   console.log('build: paletteOn', paletteOn, '| placed', buildsCount, '| type', builtType, '| afterUndo', afterUndo, '| OK', buildOk);
   console.log('pause menu OK:', pauseOk);
   const build2Ok = build2.type === 'fence' && build2.rot > 0 && build2.pieces === 9;
-  const careOk = /♥|pet+ing|friend/i.test(care.msg || '');
+  const careOk = /♥|pet+ing|friend|suka|elus/i.test(care.msg || '');
   const journalOk = journal.on && /\/ 9/.test(journal.biomes) && /\/ 6/.test(journal.quests);
   const pwaOk = pwa.name === 'Skyseed Isles' && pwa.display === 'standalone' && pwa.sw === true;
   const wardrobeOk = wr.on && wr.hats === 4 && wr.capes === 3 && wr.locked > 0 && (!wr.picked || !!wr.saved);
-  const rideOk = ride.btnShown && ride.label === 'RIDE' && /riding/i.test(ride.mounted)
-    && ride.labelAfter === 'HOP OFF' && /hop off/i.test(ride.dismounted);
+  const rideOk = ride.btnShown && (ride.label === 'RIDE' || ride.label === 'NAIKI') && /riding|menunggangi/i.test(ride.mounted)
+    && (ride.labelAfter === 'HOP OFF' || ride.labelAfter === 'TURUN') && /hop off|turun/i.test(ride.dismounted);
   console.log('ride OK:', rideOk);
   console.log('build2.0 OK:', build2Ok, '| care OK:', careOk, '| journal OK:', journalOk, '| pwa OK:', pwaOk, '| wardrobe OK:', wardrobeOk);
   console.log('RESULT:', (hasCanvas && hasTitle && buddyOk && sparkOk && buildOk && pauseOk

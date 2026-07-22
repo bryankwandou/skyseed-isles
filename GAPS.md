@@ -100,6 +100,16 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 44. No lockout/backoff after repeated failed logins (see #5).
 45. The Neon database password was pasted into a chat and **still has not been rotated**.
 
+## 🎨 Graphics pass (from real screenshots this session)
+- [x] Flat single-colour sky → gradient sky dome (zenith=sky, horizon=fog) that follows the camera and blends into the fog, plus a soft sun disc + glow that fades at night.
+- [x] Great Tree canopy was one huge faceted pink icosahedron (ugly up close) → a full rounded canopy of many smooth overlapping blobs in two shades.
+- [x] Regular tree leaves rounder (subdivided) + a second smaller blob for a fuller silhouette.
+- [x] Fixed visible English leaks caught in the screenshots: HUD "next goal" unlock names, buddy count ("2 friends" → "2 teman"), and the title-screen help line.
+- [ ] Camera can still clip into tall decorations right at spawn (collision only checks terrain, not trees).
+- [ ] Title screen is a flat gradient — the drifting-islands backdrop promised on the landing page isn't shown behind the menu.
+- [ ] Grass is a flat single green; no texture, wind, or colour variation.
+- [ ] No post-processing bloom on glowing collectibles/crystals (deferred for perf).
+
 ## 🟡 Performance and robustness
 
 46. VRM is still 6.7 MB — the single biggest download. Mesh compression untried (texture-only so far).
