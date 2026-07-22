@@ -19,11 +19,17 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
    Proven on production: a guest with 240 sparks / 2 buddies / 2 builds / 4 quests was reset to
    zero on account creation. Now the richer save always wins and is carried up to the server.
    Re-verified after the fix: all 240/2/2/4 survived.
-2. ✅ **~~The whole game is in English~~ — FIXED & VERIFIED.**
-   Full Bahasa Indonesia translation, and it is now the **default**. Every HUD label, menu, button,
-   journal row, wardrobe item, tutorial tip, quest line and Skykeeper dialogue. A language toggle
-   sits in the pause menu for English. Verified headless: `Mulai Petualangan`, `Kilau`, `Teman`,
-   `Jurnal Langit`, `Lemari Baju Miru`, and a clean round-trip back to English.
+2. ✅ **~~The whole game is in English~~ — FIXED & VERIFIED across the whole site.**
+   Full Bahasa Indonesia, now the **default**, on every surface a child or parent sees:
+   - **Game:** every HUD label, menu, button, journal row, wardrobe item, tutorial tip, quest line,
+     Skykeeper dialogue, plus the desktop keyboard-help line. Language toggle in the pause menu.
+   - **Account/sign-in page** (the first screen a child meets): tabs, labels, hints, buttons,
+     Terms & Privacy popups, and every status message.
+   - **Landing page:** hero, all six feature cards, the three how-to steps, all five FAQ answers,
+     stats and marquee.
+   - **Family dashboard:** headings, add-a-child form, bulk-add, table headers, and all confirm dialogs.
+   Verified live: `Mulai Petualangan`, `Kilau`, `Teman`, `Jurnal Langit`, `Dunia mungil`,
+   `Dasbor Keluarga`, `Tambah anak`, plus a clean round-trip back to English in-game.
 3. ✅ **~~No parent-driven child account creation~~ — FIXED & VERIFIED.**
    "Add a child" on the family dashboard. Children never type an email — a placeholder is minted
    server-side. Verified on production: parent created a child, child logged in successfully.
@@ -123,7 +129,8 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 ## 🔵 Product and polish
 
 68. No onboarding for the parent (how to make 12 accounts, what the dashboard does).
-69. Landing page still describes the old, smaller game.
+69. ~~Landing page still describes the old, smaller game.~~ ✅ Rewritten in Indonesian, false
+    "no accounts / progress resets on close / ten islands" claims corrected to match reality.
 70. No changelog for children ("what's new this week") — a real returning hook.
 71. No sound settings per-category beyond music/sfx (no ambience slider).
 72. Music is generative and can get repetitive over long sessions.
@@ -168,8 +175,7 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 2. Neon Console → reset the database password → update `DATABASE_URL` in Vercel.
 
 **Next up for me, highest value first:**
-1. Translate the account, family-dashboard and landing pages (still English) — the parent-facing
-   surfaces, and the child sign-in screen a 6-year-old sees first.
+1. ~~Translate account, dashboard and landing pages.~~ ✅ Done — whole site is Indonesian.
 2. Buddy naming + feeding (#12, #13) — naming a pet is the strongest attachment lever we are missing.
 3. Map / compass (#18) — children currently get lost in an endless world with no way to orient.
 4. Real Terms & Privacy pages instead of `alert()` popups (#38).
