@@ -100,12 +100,4 @@ fetch('/api/google', { method: 'HEAD' }).then(r => {
   });
 }).catch(() => {});
 
-// Simple in-page policy popups (kept short and honest).
-$('openTerms').addEventListener('click', e => {
-  e.preventDefault();
-  alert(L('TERMS_TEXT'));
-});
-$('openPrivacy').addEventListener('click', e => {
-  e.preventDefault();
-  alert(L('PRIVACY_TEXT'));
-});
+// The Terms and Privacy links now open real, readable pages (terms.html / privacy.html).

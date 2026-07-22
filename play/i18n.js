@@ -161,6 +161,28 @@ export const STRINGS = {
     'Hi,': 'Hai,',
     'Log out': 'Keluar',
 
+    // --- buddy panel: naming + feeding ---
+    'Your Buddies': 'Teman-Temanmu',
+    'Berries': 'Buah beri',
+    'Rename': 'Ganti nama',
+    'Feed': 'Beri makan',
+    'Name your buddy:': 'Beri nama temanmu:',
+    'No buddies yet — walk up to a slime and be kind!': 'Belum ada teman — dekati slime dan bersikaplah baik!',
+    'No berries yet — collect seeds to find some!': 'Belum ada buah beri — kumpulkan kilau untuk menemukannya!',
+    '{name} loved the berry! 🍓': '{name} suka buah berinya! 🍓',
+    'You found a berry! Feed it to a buddy in the 🐾 panel.': 'Kamu menemukan buah beri! Beri makan temanmu di panel 🐾.',
+    'Close': 'Tutup',
+    // --- photo mode ---
+    'Photo': 'Foto',
+    'Snap': 'Jepret',
+    'Exit': 'Keluar',
+    'Save': 'Simpan',
+    'Your photo': 'Fotomu',
+    'Move the camera to frame your shot, then tap Snap!': 'Gerakkan kamera untuk menata foto, lalu ketuk Jepret!',
+    'Could not take the photo on this device.': 'Tidak bisa mengambil foto di perangkat ini.',
+    // --- map ---
+    'Map': 'Peta',
+
     // --- account page ---
     'Save your sparks, buddies and islands to your own account.': 'Simpan kilau, teman, dan pulaumu ke akunmu sendiri.',
     'Log in': 'Masuk',
@@ -194,7 +216,7 @@ export const STRINGS = {
     'Already logged in as {name}. Redirecting…': 'Sudah masuk sebagai {name}. Mengalihkan…',
 
     // --- desktop help line (only shown on the website, so it matters most there) ---
-    'HELP_LINE': 'WASD lari · Spasi lompat · dekati slime untuk berteman · P elus · R naiki temanmu · E bicara · B bangun (R putar) · J jurnal · K lemari baju · F sentil · Esc pengaturan',
+    'HELP_LINE': 'WASD lari · Spasi lompat · dekati slime untuk berteman · P elus · R naiki temanmu · N teman (nama & makan) · M peta · K lemari · J jurnal · 📷 foto · E bicara · B bangun · F sentil · Esc pengaturan',
     'TITLE_TAGLINE': 'Miru si tukang kebun langit menjelajahi pulau-pulau yang tak pernah habis. Kumpulkan kilau, buka jurus baru, berteman dengan slime, dan tunggangi mereka sampai tumbuh sayap.',
 
     // --- policies ---
