@@ -183,6 +183,21 @@ export const STRINGS = {
     // --- map ---
     'Map': 'Peta',
 
+    // --- unlock names (shown live in the HUD "next goal") ---
+    'Springy Boots': 'Sepatu Pegas',
+    'Feather Glide': 'Layang Bulu',
+    'Triple Hop': 'Lompat Tiga',
+    'Spark Magnet': 'Magnet Kilau',
+    'Wind Runner': 'Pelari Angin',
+    'Sparkle Trail': 'Jejak Kilau',
+    'Cloud Steps': 'Langkah Awan',
+    'Sky Explorer': 'Penjelajah Langit',
+    '{n} friends': '{n} teman',
+    'none yet': 'belum ada',
+
+    // --- title screen help line ---
+    'TITLE_HELP': 'WASD lari · gerak tetikus untuk melihat · Spasi lompat · dekati slime untuk berteman · B bangun & hias · F sentil · Esc pengaturan · semua tersimpan',
+
     // --- account page ---
     'Save your sparks, buddies and islands to your own account.': 'Simpan kilau, teman, dan pulaumu ke akunmu sendiri.',
     'Log in': 'Masuk',

@@ -28,6 +28,36 @@ scene.add(sun);
 const hemi = new THREE.HemisphereLight(0xbfe8ff, 0x7fbf6a, 0.9);
 scene.add(hemi);
 
+// gradient sky dome — richer than a flat colour, and its horizon blends into the fog
+const skyUniforms = {
+  top: { value: new THREE.Color(0x8fd0f5) },
+  bottom: { value: new THREE.Color(0xdfeffb) },
+  exponent: { value: 0.9 }
+};
+const skyDome = new THREE.Mesh(
+  new THREE.SphereGeometry(320, 24, 16),
+  new THREE.ShaderMaterial({
+    uniforms: skyUniforms, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform vec3 top; uniform vec3 bottom; uniform float exponent; varying vec3 vP;' +
+      'void main(){ float h = normalize(vP).y * 0.5 + 0.5; float m = pow(clamp(h,0.0,1.0), exponent); gl_FragColor = vec4(mix(bottom, top, m), 1.0); }'
+  })
+);
+skyDome.renderOrder = -1;
+scene.add(skyDome);
+
+// a soft sun disc + glow high in the sky, so there is a warm focal point
+const sunSprite = new THREE.Mesh(
+  new THREE.CircleGeometry(14, 32),
+  new THREE.MeshBasicMaterial({ color: 0xfff6e0, transparent: true, opacity: 0.9, fog: false, depthWrite: false })
+);
+const sunGlow = new THREE.Mesh(
+  new THREE.CircleGeometry(30, 32),
+  new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.28, fog: false, depthWrite: false })
+);
+sunSprite.renderOrder = -1; sunGlow.renderOrder = -1;
+scene.add(sunGlow); scene.add(sunSprite);
+
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -96,10 +126,14 @@ function makeTree(isl, ox, oz) {
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 8),
     new THREE.MeshToonMaterial({ color: 0x8a5a3b }));
   trunk.position.set(ox, 1.1, oz); trunk.castShadow = true;
-  const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 0),
-    new THREE.MeshToonMaterial({ color: isl.biome.leaf }));
+  // rounder, fuller canopy from two overlapping blobs instead of one faceted ball
+  const lm = new THREE.MeshToonMaterial({ color: isl.biome.leaf });
+  const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), lm);
   leaf.position.set(ox, 3.1, oz); leaf.castShadow = true;
-  isl.group.add(trunk, leaf);
+  const leaf2 = new THREE.Mesh(new THREE.IcosahedronGeometry(1.0, 1),
+    new THREE.MeshToonMaterial({ color: new THREE.Color(isl.biome.leaf).multiplyScalar(0.88) }));
+  leaf2.position.set(ox + 0.6, 3.6, oz - 0.4); leaf2.castShadow = true;
+  isl.group.add(trunk, leaf, leaf2);
 }
 
 // waterfall ribbon under a group child (local coords)
@@ -289,10 +323,11 @@ function addMoonpetal(isl, ox, oz) {
 
 // bops now lives in progress.bops (persisted)
 
-let msgTimer;
+let msgTimer, lastSayAt = -1e9;
 function say(text) {
   const el = $('msg');
   el.textContent = text; el.classList.add('show');
+  lastSayAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   clearTimeout(msgTimer);
   msgTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
@@ -420,8 +455,8 @@ function refreshGoal() {
   const spEl = $('cSpark'); if (spEl) spEl.textContent = progress.sparks;
   const bopEl = $('cBop'); if (bopEl) bopEl.textContent = progress.bops || 0;
   const gEl = $('nextGoal'), inEl = $('nextIn');
-  if (nu) { if (gEl) gEl.textContent = nu.name; if (inEl) inEl.textContent = Math.max(0, nu.at - progress.sparks); }
-  else { if (gEl) gEl.textContent = 'Sky Explorer'; if (inEl) inEl.textContent = '∞'; }
+  if (nu) { if (gEl) gEl.textContent = L(nu.name); if (inEl) inEl.textContent = Math.max(0, nu.at - progress.sparks); }
+  else { if (gEl) gEl.textContent = L('Sky Explorer'); if (inEl) inEl.textContent = '∞'; }
 }
 function applyUnlock(u, announce) {
   u.apply();
@@ -475,16 +510,22 @@ function decorate(isl, rand) {
 
 // landmark "Great Tree" wonder island: huge tree, guaranteed rewards
 function makeWonder(isl, rand) {
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.4, 9, 10),
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.4, 9, 12),
     new THREE.MeshToonMaterial({ color: 0x7a4a30 }));
   trunk.position.set(0, 4.5, 0); trunk.castShadow = true;
   isl.group.add(trunk);
-  for (let i = 0; i < 4; i++) {
-    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6 - i * 0.35, 0),
-      new THREE.MeshToonMaterial({ color: isl.biome.leaf }));
-    const a = i * 1.7;
-    leaf.position.set(Math.cos(a) * 1.4, 8.2 + i * 1.1, Math.sin(a) * 1.4);
-    leaf.castShadow = true;
+  // a full, rounded canopy built from many smooth overlapping blobs (not one faceted ball)
+  const leafMat = new THREE.MeshToonMaterial({ color: isl.biome.leaf });
+  const leafMat2 = new THREE.MeshToonMaterial({ color: new THREE.Color(isl.biome.leaf).multiplyScalar(0.86) });
+  const blobs = [
+    [0, 9.4, 0, 2.7], [1.7, 8.6, 0.6, 2.0], [-1.6, 8.7, -0.5, 2.1],
+    [0.5, 8.4, 1.7, 1.9], [-0.6, 8.5, -1.7, 1.9], [0, 10.6, 0, 1.9],
+    [1.3, 10.0, -1.2, 1.6], [-1.3, 9.9, 1.2, 1.6]
+  ];
+  for (let i = 0; i < blobs.length; i++) {
+    const [x, y, z, r] = blobs[i];
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), i % 2 ? leafMat2 : leafMat);
+    leaf.position.set(x, y, z); leaf.castShadow = true;
     isl.group.add(leaf);
   }
   addMoonpetal(isl, 0, 2.4);
@@ -599,7 +640,7 @@ function makePet(color, level, name, happy) {
 
 function updateBuddyHud() {
   const el = $('cBuddy');
-  if (el) el.textContent = pets.length ? pets.length + (pets.length > 1 ? ' friends' : ' friend') : 'none yet';
+  if (el) el.textContent = pets.length ? L('{n} friends', { n: pets.length }) : L('none yet');
 }
 function savePets() { progress.pets = pets.map(p => ({ level: p.level, color: p.color, name: p.name, happy: Math.round(p.happy) })); saveProgress(); }
 
@@ -915,6 +956,9 @@ fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => {
 // ---------- first-run tutorial tips (each shows once, ever) ----------
 function tip(key, text) {
   if (settings.tut[key]) return;
+  // never stomp on a message the child just saw (e.g. "You're riding Boba!") — wait for a quiet moment
+  const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  if (now - lastSayAt < 1800) return;
   settings.tut[key] = true; saveSettings();
   say(text);
 }
@@ -1636,8 +1680,20 @@ function animate() {
 
     // ease sky + fog toward the current biome (dimmed by time of day)
     const bh = biomeFor(player.position.x, player.position.z);
-    scene.background.lerp(skyTmp.setHex(bh.sky).multiplyScalar(0.55 + 0.45 * dayF), dt * 0.8);
-    scene.fog.color.lerp(fogTmp.setHex(bh.fog).multiplyScalar(0.55 + 0.45 * dayF), dt * 0.8);
+    const dim = 0.55 + 0.45 * dayF;
+    scene.background.lerp(skyTmp.setHex(bh.sky).multiplyScalar(dim), dt * 0.8);
+    scene.fog.color.lerp(fogTmp.setHex(bh.fog).multiplyScalar(dim), dt * 0.8);
+    // drive the gradient dome: zenith = sky, horizon = fog, so it blends seamlessly
+    skyUniforms.top.value.lerp(skyTmp.setHex(bh.sky).multiplyScalar(dim), dt * 0.8);
+    skyUniforms.bottom.value.lerp(fogTmp.setHex(bh.fog).multiplyScalar(dim * 1.05), dt * 0.8);
+    skyDome.position.copy(camera.position);
+    // keep the sun high, offset from the camera, and fade it at night
+    const sd = new THREE.Vector3(0.4, 0.8, 0.45).normalize();
+    sunSprite.position.copy(camera.position).addScaledVector(sd, 240);
+    sunGlow.position.copy(camera.position).addScaledVector(sd, 245);
+    sunSprite.lookAt(camera.position); sunGlow.lookAt(camera.position);
+    sunSprite.material.opacity = 0.9 * dayF;
+    sunGlow.material.opacity = 0.28 * dayF;
 
     // wonder discovery: first visit to a Great Tree island
     for (const isl of islands) {
@@ -1789,7 +1845,7 @@ function animate() {
     if (rideBtn) {
       const np = riding ? riding : nearestPet(4);
       rideBtn.style.display = np ? 'flex' : 'none';
-      if (np) rideBtn.textContent = riding ? 'HOP OFF' : (np.level >= RIDE_LEVEL ? 'RIDE' : 'Lv' + np.level + '/' + RIDE_LEVEL);
+      if (np) rideBtn.textContent = riding ? L('HOP OFF') : (np.level >= RIDE_LEVEL ? L('RIDE') : 'Lv' + np.level + '/' + RIDE_LEVEL);
     }
     // nudge toward the wings goal only for buddies that aren't there yet
     if (riding && !riding.wings) tip('wings', L('Keep petting {name} — at Lv 8 they grow wings and can fly!', { name: riding.name }));
