@@ -4,7 +4,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { t as L, setLang, translateDom } from './i18n.js';
 
 // ---------- basics ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
@@ -407,7 +407,7 @@ const UNLOCKS = [
 ];
 
 const SAVE_KEY = 'skyseed_save_v1';
-let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none' } };
+let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none' }, berries: 0 };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
@@ -579,7 +579,7 @@ const PET_NAMES = ['Boba', 'Mochi', 'Pudding', 'Kiwi', 'Pixel', 'Sunny', 'Cloud'
 
 function heartBurst(pos) { burst(pos.clone().add(new THREE.Vector3(0, 0.6, 0)), 0xff8fc0, 14); }
 
-function makePet(color, level, name) {
+function makePet(color, level, name, happy) {
   const g = new THREE.Group();
   const blob = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 12), new THREE.MeshToonMaterial({ color }));
   blob.scale.y = 0.82; blob.castShadow = true; g.add(blob);
@@ -591,7 +591,7 @@ function makePet(color, level, name) {
   });
   g.position.copy(player.position);
   scene.add(g);
-  const pet = { g, blob, color, level: level || 1, xp: 0, name: name || PET_NAMES[Math.floor(Math.random() * PET_NAMES.length)], phase: Math.random() * 6 };
+  const pet = { g, blob, color, level: level || 1, xp: 0, happy: (typeof happy === 'number' ? happy : 60), name: name || PET_NAMES[Math.floor(Math.random() * PET_NAMES.length)], phase: Math.random() * 6 };
   pets.push(pet);
   if (pet.level >= 8) addWings(pet); // a fully-raised buddy keeps its wings between sessions
   return pet;
@@ -601,7 +601,7 @@ function updateBuddyHud() {
   const el = $('cBuddy');
   if (el) el.textContent = pets.length ? pets.length + (pets.length > 1 ? ' friends' : ' friend') : 'none yet';
 }
-function savePets() { progress.pets = pets.map(p => ({ level: p.level, color: p.color, name: p.name })); saveProgress(); }
+function savePets() { progress.pets = pets.map(p => ({ level: p.level, color: p.color, name: p.name, happy: Math.round(p.happy) })); saveProgress(); }
 
 function befriend(slime) {
   let gi = slimes.indexOf(slime); if (gi >= 0) slimes.splice(gi, 1);
@@ -691,7 +691,7 @@ const rideBtn = $('rideBtn');
 if (rideBtn) rideBtn.addEventListener('click', toggleRide);
 
 // bring back buddies made in a past session
-if (Array.isArray(progress.pets)) for (const p of progress.pets) makePet(p.color, p.level, p.name);
+if (Array.isArray(progress.pets)) for (const p of progress.pets) makePet(p.color, p.level, p.name, p.happy);
 updateBuddyHud();
 
 // ---------- build mode: place & decorate your islands, saved forever ----------
@@ -839,9 +839,9 @@ function clearBuilds() {
 
 function applyServerProgress(p) {
   if (!p || typeof p !== 'object') return;
-  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none' } }, p);
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none' }, berries: 0 }, p);
   for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
-  clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name);
+  clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name, pet.happy);
   clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
   applyWardrobe();
   refreshGoal(); updateBuddyHud();
@@ -871,30 +871,41 @@ function renderAccountBar(u) {
   }
 }
 
-// How much play a save represents. Used so the smaller save can never silently
-// erase the bigger one — a child who plays as a guest and then signs up keeps everything.
-function progressScore(p) {
-  if (!p || typeof p !== 'object') return -1;
-  return (p.sparks || 0)
-    + (Array.isArray(p.builds) ? p.builds.length : 0) * 3
-    + (Array.isArray(p.pets) ? p.pets.length : 0) * 10
-    + (Array.isArray(p.biomes) ? p.biomes.length : 0) * 15
-    + ((p.quest && p.quest.i) || 0) * 25
-    + (p.treasures || 0) * 10;
+// Merge two saves field by field, always keeping the more-advanced value of each.
+// This way a child who builds on a tablet and then plays on a phone loses nothing from
+// either session — no single "winner" can erase the other's work.
+function mergeProgress(a, b) {
+  a = a || {}; b = b || {};
+  const num = k => Math.max(a[k] || 0, b[k] || 0);
+  const longer = k => ((b[k] || []).length >= (a[k] || []).length ? (b[k] || []) : (a[k] || [])).slice();
+  const union = k => Array.from(new Set([...(a[k] || []), ...(b[k] || [])]));
+  // pets/builds: keep whichever list is richer (more entries, then higher total level)
+  const petScore = list => (list || []).reduce((s, p) => s + 1 + (p.level || 0), 0);
+  const pets = petScore(b.pets) >= petScore(a.pets) ? (b.pets || []) : (a.pets || []);
+  const wa = a.wardrobe || {}, wb = b.wardrobe || {};
+  return {
+    sparks: num('sparks'),
+    unlocked: union('unlocked'),
+    biomes: union('biomes'),
+    wonders: union('wonders'),
+    pets: pets.slice(),
+    builds: longer('builds'),
+    treasures: num('treasures'), shinies: num('shinies'), bops: num('bops'),
+    berries: num('berries'),
+    quest: { i: Math.max((a.quest && a.quest.i) || 0, (b.quest && b.quest.i) || 0), base: null },
+    // prefer a chosen cosmetic over "none"
+    wardrobe: { hat: (wb.hat && wb.hat !== 'none') ? wb.hat : (wa.hat || 'none'),
+                cape: (wb.cape && wb.cape !== 'none') ? wb.cape : (wa.cape || 'none') }
+  };
 }
 
 fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => {
   if (u && u.username) {
     serverUser = u.username;
-    const mine = progressScore(progress), theirs = progressScore(u.progress);
-    if (theirs >= mine) {
-      applyServerProgress(u.progress);
-      say(L('Welcome back, {name}!', { name: u.username }));
-    } else {
-      // this device is ahead (e.g. played as a guest, then signed up) — carry it up
-      saveProgress();
-      say(L('Welcome, {name}! Your progress came with you.', { name: u.username }));
-    }
+    // merge this device's save with the server's, so neither can wipe the other
+    applyServerProgress(mergeProgress(progress, u.progress));
+    say(L('Welcome back, {name}!', { name: u.username }));
+    syncServer(); // push the merged result back up
     renderAccountBar(u);
   } else {
     renderAccountBar(null);
@@ -1047,6 +1058,106 @@ function careForBuddy() {
 const careBtn = $('careBtn');
 if (careBtn) careBtn.addEventListener('click', careForBuddy);
 
+// ---------- buddy panel: name your buddies and feed them berries ----------
+function feedBuddy(pet) {
+  if ((progress.berries || 0) <= 0) { say(L('No berries yet — collect seeds to find some!')); chime(300); return; }
+  progress.berries--;
+  pet.happy = Math.min(100, (pet.happy || 60) + 22);
+  pet.careBounce = 1;
+  heartBurst(pet.g.position); chime(1120);
+  if (navigator.vibrate) navigator.vibrate(10);
+  grantPetXp(3); // a fed buddy grows a little
+  say(L('{name} loved the berry! 🍓', { name: pet.name }));
+  renderBuddyPanel();
+}
+
+function renameBuddy(pet) {
+  const cur = pet.name;
+  const nm = (prompt(L('Name your buddy:'), cur) || '').trim().slice(0, 14);
+  if (!nm || nm === cur) return;
+  pet.name = nm;
+  savePets(); updateBuddyHud(); renderBuddyPanel();
+  heartBurst(pet.g.position); chime(1240);
+}
+
+function moodFor(h) {
+  if (h >= 80) return '😍'; if (h >= 55) return '😊'; if (h >= 30) return '🙂'; return '😴';
+}
+
+function renderBuddyPanel() {
+  const box = $('buddyList'); if (!box) return;
+  $('berryCount').textContent = progress.berries || 0;
+  if (!pets.length) { box.innerHTML = '<p class="bdEmpty">' + L('No buddies yet — walk up to a slime and be kind!') + '</p>'; return; }
+  box.innerHTML = '';
+  pets.forEach((p, i) => {
+    const row = document.createElement('div'); row.className = 'bdRow';
+    const dot = '#' + new THREE.Color(p.color).getHexString();
+    row.innerHTML =
+      '<span class="bdChip" style="background:' + dot + '"></span>' +
+      '<span class="bdName">' + moodFor(p.happy) + ' <b></b> <small>Lv' + p.level + (p.wings ? ' ✦' : '') + '</small></span>' +
+      '<span class="bdBar"><i style="width:' + Math.round(p.happy || 0) + '%"></i></span>';
+    row.querySelector('b').textContent = p.name;
+    const rn = document.createElement('button'); rn.className = 'bdBtn'; rn.textContent = L('Rename');
+    rn.addEventListener('click', () => renameBuddy(p));
+    const fd = document.createElement('button'); fd.className = 'bdBtn feed'; fd.textContent = L('Feed') + ' 🍓';
+    fd.addEventListener('click', () => feedBuddy(p));
+    row.appendChild(rn); row.appendChild(fd);
+    box.appendChild(row);
+  });
+}
+function openBuddyPanel() { renderBuddyPanel(); const el = $('buddyPanel'); if (el) el.classList.add('on'); }
+function closeBuddyPanel() { const el = $('buddyPanel'); if (el) el.classList.remove('on'); }
+const buddyBtn = $('buddyBtn');
+if (buddyBtn) buddyBtn.addEventListener('click', openBuddyPanel);
+const buddyClose = $('buddyClose');
+if (buddyClose) buddyClose.addEventListener('click', closeBuddyPanel);
+
+// ---------- minimap + compass: so a child never gets lost in an endless world ----------
+const mapCanvas = $('map');
+const mapCtx = mapCanvas ? mapCanvas.getContext('2d') : null;
+let mapTick = 0;
+function drawMap() {
+  if (!mapCtx) return;
+  const big = $('mapWrap').classList.contains('big');
+  const S = big ? 220 : 132;               // canvas pixel size
+  if (mapCanvas.width !== S) { mapCanvas.width = S; mapCanvas.height = S; }
+  const range = big ? 140 : 70;            // world units shown from centre to edge
+  const c = S / 2, scale = c / range;
+  mapCtx.clearRect(0, 0, S, S);
+  // soft round backdrop
+  mapCtx.fillStyle = 'rgba(20,40,70,.55)';
+  mapCtx.beginPath(); mapCtx.arc(c, c, c, 0, 7); mapCtx.fill();
+  const px = player.position.x, pz = player.position.z;
+  const toXY = (x, z) => [c + (x - px) * scale, c + (z - pz) * scale];
+  // islands
+  for (const isl of islands) {
+    const [x, y] = toXY(isl.x, isl.z);
+    if (x < -10 || x > S + 10 || y < -10 || y > S + 10) continue;
+    mapCtx.fillStyle = isl.wonder ? '#bfffcf' : 'rgba(150,220,150,.9)';
+    mapCtx.beginPath(); mapCtx.arc(x, y, Math.max(2, isl.r * scale * 0.5), 0, 7); mapCtx.fill();
+  }
+  // home marker (origin)
+  const [hx, hy] = toXY(0, 0);
+  mapCtx.fillStyle = '#ffd98a'; mapCtx.font = (big ? 16 : 11) + 'px sans-serif';
+  mapCtx.textAlign = 'center'; mapCtx.textBaseline = 'middle';
+  mapCtx.fillText('🏠', hx, hy);
+  // skykeeper
+  const [kx, ky] = toXY(skykeeper.position.x, skykeeper.position.z);
+  mapCtx.fillText('✦', kx, ky);
+  // player arrow, pointing where Miru faces
+  mapCtx.save(); mapCtx.translate(c, c); mapCtx.rotate(-body.rotation.y);
+  mapCtx.fillStyle = '#ff8fb8'; mapCtx.beginPath();
+  mapCtx.moveTo(0, -7); mapCtx.lineTo(5, 6); mapCtx.lineTo(0, 3); mapCtx.lineTo(-5, 6); mapCtx.closePath(); mapCtx.fill();
+  mapCtx.restore();
+  // compass: arrow at the rim pointing back home when you have wandered off
+  const dh = Math.hypot(px, pz);
+  if (dh > range) {
+    const ang = Math.atan2(-pz, -px);
+    const rx = c + Math.cos(ang) * (c - 12), ry = c + Math.sin(ang) * (c - 12);
+    mapCtx.fillStyle = '#ffd98a'; mapCtx.fillText('🏠', rx, ry);
+  }
+}
+
 // ---------- wardrobe: cosmetics earned by exploring (never bought) ----------
 const WARDROBE = {
   hat: [
@@ -1185,6 +1296,8 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyR' && !buildMode) toggleRide();
   if (e.code === 'KeyJ') { const j = $('journal'); if (j && j.classList.contains('on')) closeJournal(); else openJournal(); }
   if (e.code === 'KeyK') { const w = $('wardrobe'); if (w && w.classList.contains('on')) closeWardrobe(); else openWardrobe(); }
+  if (e.code === 'KeyN') { const bp = $('buddyPanel'); if (bp && bp.classList.contains('on')) closeBuddyPanel(); else openBuddyPanel(); }
+  if (e.code === 'KeyM') { const mp = $('mapWrap'); if (mp) mp.classList.toggle('big'); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
@@ -1341,6 +1454,28 @@ function bindSetting(id, apply) {
   }
 }
 applyA11y();
+
+// ---------- photo mode: frame a shot, snap it, save it (a sharing hook for siblings) ----------
+function setPhotoMode(on) {
+  document.body.classList.toggle('photo', on);
+  if (on) tip('photo', L('Move the camera to frame your shot, then tap Snap!'));
+}
+const photoBtn = $('photoBtn');
+if (photoBtn) photoBtn.addEventListener('click', () => setPhotoMode(!document.body.classList.contains('photo')));
+const photoExit = $('photoExit');
+if (photoExit) photoExit.addEventListener('click', () => setPhotoMode(false));
+const snapBtn = $('snapBtn');
+if (snapBtn) snapBtn.addEventListener('click', () => {
+  try {
+    const url = renderer.domElement.toDataURL('image/png');
+    const img = $('photoImg'); if (img) img.src = url;
+    const dl = $('photoSave'); if (dl) { dl.href = url; dl.download = 'skyseed-' + Date.now() + '.png'; }
+    $('photoView').classList.add('on');
+    chime(1320);
+  } catch (e) { say(L('Could not take the photo on this device.')); }
+});
+const photoClose = $('photoClose');
+if (photoClose) photoClose.addEventListener('click', () => $('photoView').classList.remove('on'));
 
 // "saved" micro-toast, used by the server sync
 let toastTimer;
@@ -1626,9 +1761,18 @@ function animate() {
           chime(c.kind === 'seed' ? 880 : c.kind === 'ring' ? 740 : 990);
         }
         if (navigator.vibrate) navigator.vibrate(12);
+        // seeds sometimes hide a berry — food to feed your buddies
+        if (c.kind === 'seed' && Math.random() < 0.28) {
+          progress.berries = (progress.berries || 0) + 1;
+          burst(c.mesh ? head.clone() : head, 0xff6a8a, 6);
+          if (pets.length) tip('berry', L('You found a berry! Feed it to a buddy in the 🐾 panel.'));
+        }
         addSparks(c.worth);
       }
     }
+
+    // minimap, refreshed a few times a second (cheap, but no need every frame)
+    if ((mapTick += dt) > 0.12) { mapTick = 0; drawMap(); }
 
     // Skykeeper: gentle float + talk when near
     skykeeper.position.y = Math.sin(t * 1.4) * 0.15 + 0.05;
@@ -1712,7 +1856,11 @@ function animate() {
       const hop = Math.abs(Math.sin(t * 4 + p.phase));
       if (p.careBounce > 0) p.careBounce = Math.max(0, p.careBounce - dt * 2);
       p.g.position.y = baseY + hop * 0.35 + (p.careBounce || 0) * 0.5;
-      p.g.scale.setScalar(1 + (p.level - 1) * 0.11);
+      // happiness drifts down very slowly; happy buddies hop a touch higher and sparkle
+      if (p.happy === undefined) p.happy = 60;
+      p.happy = Math.max(0, p.happy - dt * 0.25);
+      if (p.happy > 75 && Math.random() < dt * 0.6) burst(p.g.position.clone().add(new THREE.Vector3(0, 0.6, 0)), 0xfff2c0, 2);
+      p.g.scale.setScalar((1 + (p.level - 1) * 0.11) * (1 + (p.happy - 60) / 600));
       p.blob.scale.set(1 + (1 - hop) * 0.12, 0.82 - (1 - hop) * 0.12, 1 + (1 - hop) * 0.12);
       const dx = target.x - p.g.position.x, dz = target.z - p.g.position.z;
       if (dx * dx + dz * dz > 0.02) p.g.rotation.y = Math.atan2(dx, dz);

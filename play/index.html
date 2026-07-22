@@ -104,6 +104,79 @@
     color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; user-select:none;
   }
+  #buddyBtn, #photoBtn {
+    position:fixed; z-index:22; left:12px; width:44px; height:44px;
+    border-radius:12px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
+    color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+  }
+  #buddyBtn { top:272px; }
+  #photoBtn { top:326px; }
+  /* minimap */
+  #mapWrap {
+    position:fixed; z-index:12; right:12px; bottom:12px; width:132px; height:132px;
+    border-radius:50%; overflow:hidden; border:2px solid rgba(255,255,255,.6);
+    box-shadow:0 4px 18px rgba(20,40,80,.3); transition:width .2s, height .2s;
+  }
+  #mapWrap.big { width:220px; height:220px; }
+  #mapWrap canvas { display:block; width:100%; height:100%; }
+  /* buddy panel */
+  #buddyPanel {
+    position:fixed; inset:0; z-index:58; display:none; align-items:center; justify-content:center;
+    background:rgba(20,35,60,.45); backdrop-filter:blur(4px);
+  }
+  #buddyPanel.on { display:flex; }
+  #buddyCard {
+    width:min(94vw,420px); max-height:82vh; overflow:auto; background:#fffdf5; border-radius:20px; padding:22px;
+    color:var(--ink); box-shadow:0 18px 50px rgba(20,40,80,.35);
+  }
+  #buddyCard h2 { font-size:20px; color:#1d3a5f; margin-bottom:4px; text-align:center; }
+  #buddyCard p.sub { font-size:13px; color:#5b6b82; text-align:center; margin-bottom:12px; }
+  .bdRow { display:flex; align-items:center; gap:8px; padding:8px 4px; border-bottom:1px dashed #e2d9c8; flex-wrap:wrap; }
+  .bdChip { width:16px; height:16px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 0 2px #fff inset; }
+  .bdName { flex:1 1 90px; font-size:14px; }
+  .bdName small { color:#9aa8ba; font-weight:600; }
+  .bdBar { flex:1 1 60px; height:8px; background:#e8edf3; border-radius:99px; overflow:hidden; }
+  .bdBar i { display:block; height:100%; background:linear-gradient(90deg,#ff8fb8,#a06bf0); }
+  .bdBtn {
+    border:1.5px solid #d6e2ee; background:#fff; color:#3a6fb0; font-weight:700; font-size:12px;
+    padding:6px 10px; border-radius:9px; cursor:pointer; min-height:34px;
+  }
+  .bdBtn.feed { color:#c23f66; border-color:#f3c1cd; }
+  .bdBtn:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
+  .bdEmpty { text-align:center; color:#9aa8ba; padding:22px 4px; }
+  #buddyClose {
+    width:100%; margin-top:14px; border:none; cursor:pointer; color:#fff; font-weight:700; font-size:15px;
+    padding:11px; border-radius:12px; background:linear-gradient(135deg,#8fd0f5,#a06bf0);
+  }
+  /* photo mode */
+  body.photo #hud, body.photo #accountBar, body.photo #help, body.photo #buildBtn,
+  body.photo #careBtn, body.photo #rideBtn, body.photo #pauseBtn, body.photo #journalBtn,
+  body.photo #wardrobeBtn, body.photo #buddyBtn, body.photo #photoBtn, body.photo #mapWrap,
+  body.photo #talkBtn, body.photo #palette, body.photo #stick, body.photo .tbtn { display:none !important; }
+  #photoBar { position:fixed; z-index:40; left:50%; bottom:24px; transform:translateX(-50%); display:none; gap:10px; }
+  body.photo #photoBar { display:flex; }
+  #photoBar button {
+    border:none; cursor:pointer; color:#fff; font-weight:800; font-size:15px;
+    padding:12px 26px; border-radius:14px; box-shadow:0 6px 20px rgba(20,40,80,.3);
+  }
+  #snapBtn { background:linear-gradient(135deg,#ff8fb8,#a06bf0); }
+  #photoExit { background:rgba(30,50,80,.7); }
+  #photoView {
+    position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center;
+    background:rgba(20,35,60,.6); backdrop-filter:blur(4px); padding:20px;
+  }
+  #photoView.on { display:flex; }
+  #photoCard { background:#fff; border-radius:18px; padding:14px; max-width:min(94vw,640px); box-shadow:0 18px 50px rgba(20,40,80,.4); }
+  #photoImg { display:block; max-width:100%; max-height:66vh; border-radius:10px; }
+  .photoActs { display:flex; gap:10px; margin-top:12px; }
+  .pbtn {
+    flex:1; text-align:center; text-decoration:none; border:none; cursor:pointer; color:#fff;
+    font-weight:700; font-size:15px; padding:12px; border-radius:12px;
+    background:linear-gradient(135deg,#ff8fb8,#a06bf0);
+  }
+  .pbtn.ghost { background:#eef4fb; color:#1d3a5f; }
+  .pbtn:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
   #wardrobe {
     position:fixed; inset:0; z-index:58; display:none; align-items:center; justify-content:center;
     background:rgba(20,35,60,.45); backdrop-filter:blur(4px);
@@ -247,6 +320,30 @@
 <button id="pauseBtn" aria-label="Pause and settings">⚙</button>
 <button id="journalBtn" aria-label="Journal">📖</button>
 <button id="wardrobeBtn" aria-label="Wardrobe">👒</button>
+<button id="buddyBtn" aria-label="Buddies" data-i18n-aria="Your Buddies">🐾</button>
+<button id="photoBtn" aria-label="Photo mode" data-i18n-aria="Photo">📷</button>
+<div id="mapWrap" aria-hidden="true"><canvas id="map" width="132" height="132"></canvas></div>
+<div id="photoBar">
+  <button id="snapBtn" data-i18n="Snap">Snap</button>
+  <button id="photoExit" data-i18n="Exit">Exit</button>
+</div>
+<div id="photoView" role="dialog" aria-label="Photo">
+  <div id="photoCard">
+    <img id="photoImg" alt="Your Skyseed photo" />
+    <div class="photoActs">
+      <a id="photoSave" class="pbtn" data-i18n="Save">Save</a>
+      <button id="photoClose" class="pbtn ghost" data-i18n="Close">Close</button>
+    </div>
+  </div>
+</div>
+<div id="buddyPanel" role="dialog" aria-label="Buddies">
+  <div id="buddyCard">
+    <h2 data-i18n="Your Buddies">Your Buddies</h2>
+    <p class="sub"><span data-i18n="Berries">Berries</span>: 🍓 <b id="berryCount">0</b></p>
+    <div id="buddyList"></div>
+    <button id="buddyClose" data-i18n="Close">Close</button>
+  </div>
+</div>
 <div id="wardrobe" role="dialog" aria-label="Wardrobe">
   <div id="wardrobeCard">
     <h2 data-i18n="Miru's Wardrobe">Miru's Wardrobe</h2>

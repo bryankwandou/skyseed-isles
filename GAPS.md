@@ -48,9 +48,11 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
    Use the family dashboard → "Add a child". Nothing is handed to any child until you do.
 8. 🔴 **Still open — the Neon database password has not been rotated.** It was pasted into a chat.
    Only you can do this: Neon Console → Reset password → update `DATABASE_URL` in Vercel.
-9. 🟠 **Still open — two devices can still overwrite each other.** The score-based merge prevents
-   *catastrophic* loss, but a child who builds on a tablet then plays on a phone can lose the
-   smaller session. Needs per-field merge or a timestamp + "keep which?" prompt.
+9. ✅ **~~Two devices can overwrite each other~~ — FIXED & VERIFIED.**
+   Replaced the whole-save "winner" with a **per-field merge**: sparks/treasures/bops take the max,
+   unlocked/biomes/wonders take the union, pets/builds keep the richer list, a chosen cosmetic beats
+   "none". On login both saves are merged and the result pushed back up, so neither device can wipe
+   the other's work.
 
 ## 🟠 Important — real gaps in the experience
 
@@ -58,14 +60,14 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
    progress like "0/10 sparks" after already collecting some.
 9. Bopping a slime writes to the server on every single bop — noisy and wasteful.
 10. No "are you sure?" when a child hits Undo repeatedly — builds vanish silently.
-11. No way to see *which* buddy is which level; the HUD only shows a count.
-12. No feeding action; petting is the only care verb (feeding was promised in the roadmap).
-13. Buddies cannot be renamed — a child naming their pet is a huge attachment lever.
+11. ✅ ~~No way to see which buddy is which level~~ — the 🐾 Buddies panel lists each one with level, mood and happiness bar.
+12. ✅ ~~No feeding action~~ — feed buddies berries (found in seeds) from the 🐾 panel; raises happiness and grants XP.
+13. ✅ ~~Buddies cannot be renamed~~ — rename any buddy from the 🐾 panel.
 14. No way to dismiss/release a buddy, so a mis-befriended slime is permanent.
 15. Wardrobe has only 2 slots (hat, cape). No shoes, wings, colours, or face accessories.
 16. Miru's own colours cannot be changed — no character customisation at all.
 17. No fast travel; crossing biomes on foot gets long once the world opens up.
-18. No map or compass — children get disoriented in an endless world.
+18. ✅ ~~No map or compass~~ — a round minimap (bottom-right) shows islands, home 🏠, the Skykeeper ✦ and a home-compass when you wander off; M enlarges it.
 19. Great Trees are the only landmark type; the promised waterfall ring and lighthouse are missing.
 20. Weather (mist, petals, snow) was planned and never built.
 21. Only one quest chain; after 6 quests the Skykeeper has nothing new to say.
@@ -76,7 +78,7 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 26. Slimes only wander; no varied creature behaviours or personalities.
 27. Nothing to do at night specifically, despite building a day/night cycle.
 28. No seasonal events.
-29. No photo mode (planned; strong sharing hook for kids).
+29. ✅ ~~No photo mode~~ — 📷 hides the HUD to frame a shot, Snap saves a PNG.
 30. No local co-op, so 12 siblings can never play together.
 31. Children cannot see each other's islands at all.
 32. No family leaderboard/shared goal, despite the family dashboard existing.
@@ -88,7 +90,7 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 35. No audit log of parent actions (password resets, deletions).
 36. Deleting a child is irreversible with no export/backup of their world first.
 37. No data export ("give me my child's data") despite promising a right to delete.
-38. Terms/Privacy live in `alert()` popups — not readable, not printable, not real pages.
+38. ✅ ~~Terms/Privacy live in alert() popups~~ — real, readable, bilingual pages (terms.html, privacy.html).
 39. No age gate or parent-consent step at sign-up.
 40. Children type their own email at sign-up; for a family flow the parent should create accounts
     and children should never enter an email.
