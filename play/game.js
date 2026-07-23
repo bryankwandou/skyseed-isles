@@ -96,13 +96,26 @@ function makeIsland(x, y, z, r, biome, rand) {
   const tuftGeo = new THREE.ConeGeometry(0.16, 0.55, 5);
   const n = Math.floor(r * r * 0.7);
   const inst = new THREE.InstancedMesh(tuftGeo, tuftMat, n);
-  const m = new THREE.Matrix4();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0), tuftBase = new THREE.Color(biome.tuft), tuftAlt = new THREE.Color(biome.grass);
+  const tc = new THREE.Color();
   for (let i = 0; i < n; i++) {
     const a = rand() * Math.PI * 2, d = Math.sqrt(rand()) * (r - 0.6);
-    m.makeRotationY(rand() * Math.PI);
-    m.setPosition(Math.cos(a) * d, 0.25, Math.sin(a) * d);
+    // varied height, a slight lean, and random spin so the grass never looks stamped
+    const hs = 0.7 + rand() * 0.9, lean = (rand() - 0.5) * 0.5;
+    q.setFromAxisAngle(up, rand() * Math.PI);
+    const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), lean);
+    q.multiply(tilt);
+    scl.set(0.75 + rand() * 0.6, hs, 0.75 + rand() * 0.6);
+    pos.set(Math.cos(a) * d, 0.1 + hs * 0.14, Math.sin(a) * d);
+    m.compose(pos, q, scl);
     inst.setMatrixAt(i, m);
+    // blend each blade between tuft and grass tone for a mottled, natural field
+    tc.copy(tuftBase).lerp(tuftAlt, rand() * 0.55).multiplyScalar(0.9 + rand() * 0.2);
+    inst.setColorAt(i, tc);
   }
+  inst.instanceMatrix.needsUpdate = true;
+  if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
   g.add(inst);
   g.position.set(x, y, z);
   scene.add(g);
@@ -289,10 +302,30 @@ const ringMat = new THREE.MeshBasicMaterial({ color: 0x8af0d8 });
 seedMat.userData.shared = starMat.userData.shared = ringMat.userData.shared = true;
 
 // sparks are worth: seed 1, ring 2, star 3 — the single currency that drives unlocks
+// soft radial glow texture, built once, reused for every collectible halo (bloom-lite)
+const glowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+function glowSprite(color, size) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color, blending: THREE.AdditiveBlending, transparent: true,
+    depthWrite: false, opacity: 0.85, fog: false
+  }));
+  sp.scale.setScalar(size);
+  return sp;
+}
 function addSeed(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.32), seedMat);
   s.position.set(isl.x + ox, isl.y + 1, isl.z + oz);
   s.add(new THREE.PointLight(0xffe98a, 0.6, 4));
+  s.add(glowSprite(0xffe08a, 1.6));
   scene.add(s);
   const c = { mesh: s, kind: 'seed', r: 1.1, worth: 1 };
   collect.push(c); isl.collect.push(c);
@@ -300,6 +333,7 @@ function addSeed(isl, ox, oz) {
 function addStar(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.TetrahedronGeometry(0.4), starMat);
   s.position.set(isl.x + ox, isl.y + 1.2, isl.z + oz);
+  s.add(glowSprite(0xfff2a0, 1.9));
   scene.add(s);
   const c = { mesh: s, kind: 'star', r: 1.2, worth: 3 };
   collect.push(c); isl.collect.push(c);
@@ -307,6 +341,7 @@ function addStar(isl, ox, oz) {
 function addRing(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.12, 10, 28), ringMat);
   s.position.set(isl.x + ox, isl.y + 2.2, isl.z + oz);
+  s.add(glowSprite(0x9ad8ff, 2.6));
   scene.add(s);
   const c = { mesh: s, kind: 'ring', r: 1.4, worth: 2 };
   collect.push(c); isl.collect.push(c);
@@ -317,6 +352,7 @@ function addMoonpetal(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), petalMat);
   s.position.set(isl.x + ox, isl.y + 1.3, isl.z + oz);
   s.add(new THREE.PointLight(0xd8b8ff, 0.9, 6));
+  s.add(glowSprite(0xe6c8ff, 2.2));
   scene.add(s);
   const c = { mesh: s, kind: 'petal', r: 1.2, worth: 5 };
   collect.push(c); isl.collect.push(c);
@@ -2029,9 +2065,11 @@ function animate() {
       const hits = camRay.intersectObjects(scene.children, true);
       for (const h of hits) {
         if (camRayBlocks(h.object)) {
-          // sit just in front of the obstacle so the view never clips through it,
-          // but never so close it becomes an uncomfortable face-filling closeup
-          target.copy(head).addScaledVector(camRay.ray.direction, Math.max(3.6, h.distance - 0.5));
+          // sit just IN FRONT of the obstacle — never farther, or the camera would
+          // end up inside/behind it and render the mesh interior (a full-screen blob).
+          // a small floor keeps it from jamming into the player (now modestly dressed).
+          const d = Math.min(wantDist, Math.max(1.6, h.distance - 0.4));
+          target.copy(head).addScaledVector(camRay.ray.direction, d);
           break;
         }
       }
