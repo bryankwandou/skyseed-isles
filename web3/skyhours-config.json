@@ -1,0 +1,10 @@
+{
+  "cluster": "devnet",
+  "note": "Public addresses only. No secrets. SkyHours runs exclusively on Solana devnet — SKY has zero monetary value by design.",
+  "skyMint": "G4AD9pew62hL5N6sdAvV65mVj1pX52QeNDA3RH5JzB4R",
+  "skyDecimals": 0,
+  "unit": "1 SKY = 1 minute of sky-time",
+  "mintAuthority": "35z7X59rtyts557Up1RAwpyYN7x2cFqcDc7RjPuNxFzr",
+  "rpc": "https://api.devnet.solana.com",
+  "explorer": "https://explorer.solana.com/address/G4AD9pew62hL5N6sdAvV65mVj1pX52QeNDA3RH5JzB4R?cluster=devnet"
+}
