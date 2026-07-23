@@ -1348,6 +1348,16 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 // --- free-look camera state ---
 let camYaw = 0, camPitch = 0.32, camDist = 9;
 const isTouch = matchMedia('(pointer:coarse)').matches;
+// raycaster used to keep the camera from clipping through trees/decorations
+const camRay = new THREE.Raycaster();
+camRay.far = 40;
+// objects the camera ray must ignore (sky/sun/player never block the view)
+function camRayBlocks(obj) {
+  for (let o = obj; o; o = o.parent) {
+    if (o === player || o === skyDome || o === sunSprite || o === sunGlow) return false;
+  }
+  return true;
+}
 
 // desktop: pointer lock mouse-look; click while locked = punch
 renderer.domElement.addEventListener('click', () => {
@@ -1950,6 +1960,23 @@ function animate() {
     // camera collision: never sink below the island the camera hovers over
     const cgh = groundHeight(target.x, target.z);
     if (cgh > -Infinity && target.y < cgh + 0.7) target.y = cgh + 0.7;
+    // camera collision: pull in if a tree/decoration sits between head and camera
+    const head = new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z);
+    const toCam = target.clone().sub(head);
+    const wantDist = toCam.length();
+    if (wantDist > 0.01) {
+      camRay.set(head, toCam.multiplyScalar(1 / wantDist));
+      camRay.far = wantDist;
+      const hits = camRay.intersectObjects(scene.children, true);
+      for (const h of hits) {
+        if (camRayBlocks(h.object)) {
+          // sit just in front of the obstacle so the view never clips through it,
+          // but never so close it becomes an uncomfortable face-filling closeup
+          target.copy(head).addScaledVector(camRay.ray.direction, Math.max(3.6, h.distance - 0.5));
+          break;
+        }
+      }
+    }
     camera.position.lerp(target, 0.35);
   } else {
     camera.position.set(Math.sin(t * 0.15) * 22, 10, Math.cos(t * 0.15) * 22);
