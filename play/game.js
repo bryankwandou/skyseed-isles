@@ -233,6 +233,7 @@ let vrm = null, vrmBones = null;
       lLeg: h.getNormalizedBoneNode('leftUpperLeg'),
       rLeg: h.getNormalizedBoneNode('rightUpperLeg'),
       spine: h.getNormalizedBoneNode('spine'),
+      hips: h.getNormalizedBoneNode('hips'),
       neck: h.getNormalizedBoneNode('neck'),
       head: h.getNormalizedBoneNode('head')
     };
@@ -442,7 +443,7 @@ const UNLOCKS = [
 ];
 
 const SAVE_KEY = 'skyseed_save_v1';
-let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none' }, berries: 0 };
+let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0 };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
@@ -880,7 +881,7 @@ function clearBuilds() {
 
 function applyServerProgress(p) {
   if (!p || typeof p !== 'object') return;
-  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none' }, berries: 0 }, p);
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0 }, p);
   for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
   clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name, pet.happy);
   clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
@@ -936,7 +937,8 @@ function mergeProgress(a, b) {
     quest: { i: Math.max((a.quest && a.quest.i) || 0, (b.quest && b.quest.i) || 0), base: null },
     // prefer a chosen cosmetic over "none"
     wardrobe: { hat: (wb.hat && wb.hat !== 'none') ? wb.hat : (wa.hat || 'none'),
-                cape: (wb.cape && wb.cape !== 'none') ? wb.cape : (wa.cape || 'none') }
+                cape: (wb.cape && wb.cape !== 'none') ? wb.cape : (wa.cape || 'none'),
+                outfit: wb.outfit || wa.outfit || 'dress' }
   };
 }
 
@@ -1204,6 +1206,13 @@ function drawMap() {
 
 // ---------- wardrobe: cosmetics earned by exploring (never bought) ----------
 const WARDROBE = {
+  // outfit has no 'none' option — Miru always wears something (kid-friendly by design)
+  outfit: [
+    { id: 'dress',  name: 'Sky Dress',     need: () => true,                                 req: '' },
+    { id: 'meadow', name: 'Meadow Tunic',  need: () => progress.biomes.length >= 2,          req: 'Discover 2 regions' },
+    { id: 'sunset', name: 'Sunset Gown',   need: () => progress.sparks >= 40,                req: 'Collect 40 sparks' },
+    { id: 'star',   name: 'Starlight Robe', need: () => (progress.wonders || []).length >= 1, req: 'Find a Great Tree' }
+  ],
   hat: [
     { id: 'none',   name: 'No hat',       need: () => true, req: '' },
     { id: 'flower', name: 'Flower Crown', need: () => progress.sparks >= 20,               req: 'Collect 20 sparks' },
@@ -1216,6 +1225,49 @@ const WARDROBE = {
     { id: 'star', name: 'Starlight Cape', need: () => (progress.treasures || 0) >= 1,       req: 'Find a moonpetal' }
   ]
 };
+
+// a full outfit that covers the torso and legs — built in real-metre proportions
+// so it drops straight onto the normalized VRM hips bone at scale 1
+function makeOutfit(id) {
+  const palette = {
+    dress:  { body: 0x7fb0e8, skirt: 0x6a9fe0, trim: 0xffffff },
+    meadow: { body: 0x8fd6a0, skirt: 0x74c58a, trim: 0xfff2c0 },
+    sunset: { body: 0xffa9c4, skirt: 0xf58fb2, trim: 0xffe6a0 },
+    star:   { body: 0x8f8ff0, skirt: 0x6f6fd8, trim: 0xfff2a0 }
+  }[id] || { body: 0x7fb0e8, skirt: 0x6a9fe0, trim: 0xffffff };
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshToonMaterial({ color: palette.body });
+  const skirtMat = new THREE.MeshToonMaterial({ color: palette.skirt, side: THREE.DoubleSide });
+  const trimMat = new THREE.MeshToonMaterial({ color: palette.trim });
+  // bodice: upper chest down to waist (wide/tall enough to fully hide the base top)
+  const bodice = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.14, 0.46, 18), bodyMat);
+  bodice.position.y = 0.20; g.add(bodice);
+  // rounded neckline cap so nothing peeks over the top
+  const neck = new THREE.Mesh(new THREE.SphereGeometry(0.135, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), bodyMat);
+  neck.position.y = 0.43; g.add(neck);
+  // short sleeves so shoulders/upper arms are covered
+  for (const sx of [-1, 1]) {
+    const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.15, 12), bodyMat);
+    sl.position.set(sx * 0.15, 0.33, 0); sl.rotation.z = sx * 0.5; g.add(sl);
+  }
+  // waist trim
+  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.022, 8, 20), trimMat);
+  belt.rotation.x = Math.PI / 2; belt.position.y = 0.02; g.add(belt);
+  // skirt: waist flaring down to the knees, covering hips + thighs
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.27, 0.44, 20, 1, true), skirtMat);
+  skirt.position.y = -0.19; g.add(skirt);
+  // hem trim
+  const hem = new THREE.Mesh(new THREE.TorusGeometry(0.255, 0.018, 8, 24), trimMat);
+  hem.rotation.x = Math.PI / 2; hem.position.y = -0.40; g.add(hem);
+  if (id === 'star') {
+    for (let i = 0; i < 6; i++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 6), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }));
+      const a = i / 6 * Math.PI * 2;
+      s.position.set(Math.cos(a) * 0.2, -0.28 - Math.random() * 0.08, Math.sin(a) * 0.2); g.add(s);
+    }
+  }
+  return g;
+}
 
 function makeHat(id) {
   const g = new THREE.Group();
@@ -1261,14 +1313,21 @@ function makeCape(id) {
   return g;
 }
 
-let hatMesh = null, capeMesh = null;
+let hatMesh = null, capeMesh = null, outfitMesh = null;
 function applyWardrobe() {
   if (hatMesh && hatMesh.parent) hatMesh.parent.remove(hatMesh);
   if (capeMesh && capeMesh.parent) capeMesh.parent.remove(capeMesh);
-  hatMesh = capeMesh = null;
-  const w = progress.wardrobe || { hat: 'none', cape: 'none' };
+  if (outfitMesh && outfitMesh.parent) outfitMesh.parent.remove(outfitMesh);
+  hatMesh = capeMesh = outfitMesh = null;
+  const w = progress.wardrobe || { hat: 'none', cape: 'none', outfit: 'dress' };
   const vHead = vrmBones && vrmBones.head;
   const vSpine = vrmBones && vrmBones.spine;
+  const vHips = vrmBones && vrmBones.hips;
+
+  // outfit rides the hips so torso + legs stay covered (default 'dress', never bare)
+  outfitMesh = makeOutfit(w.outfit || 'dress');
+  if (vHips) { outfitMesh.scale.setScalar(1); outfitMesh.position.y = 0.06; vHips.add(outfitMesh); }
+  else { outfitMesh.scale.setScalar(2.1); outfitMesh.position.y = 0.9; body.add(outfitMesh); }
 
   if (w.hat && w.hat !== 'none') {
     hatMesh = makeHat(w.hat);
@@ -1286,14 +1345,14 @@ function applyWardrobe() {
 }
 
 function setWardrobe(slot, id) {
-  if (!progress.wardrobe) progress.wardrobe = { hat: 'none', cape: 'none' };
+  if (!progress.wardrobe) progress.wardrobe = { hat: 'none', cape: 'none', outfit: 'dress' };
   progress.wardrobe[slot] = id;
   applyWardrobe(); saveProgress(); chime(880);
   burst(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), 0xffe08a, 14);
 }
 
 function renderWardrobe() {
-  for (const slot of ['hat', 'cape']) {
+  for (const slot of ['outfit', 'hat', 'cape']) {
     const box = $('wr_' + slot);
     if (!box) continue;
     box.innerHTML = '';
