@@ -105,10 +105,28 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 - [x] Great Tree canopy was one huge faceted pink icosahedron (ugly up close) → a full rounded canopy of many smooth overlapping blobs in two shades.
 - [x] Regular tree leaves rounder (subdivided) + a second smaller blob for a fuller silhouette.
 - [x] Fixed visible English leaks caught in the screenshots: HUD "next goal" unlock names, buddy count ("2 friends" → "2 teman"), and the title-screen help line.
-- [ ] Camera can still clip into tall decorations right at spawn (collision only checks terrain, not trees).
-- [ ] Title screen is a flat gradient — the drifting-islands backdrop promised on the landing page isn't shown behind the menu.
-- [ ] Grass is a flat single green; no texture, wind, or colour variation.
-- [ ] No post-processing bloom on glowing collectibles/crystals (deferred for perf).
+- [x] **Camera clipping into trees — FIXED.** Added a camera→player raycast that pulls the camera in front of any blocking decoration. Two follow-up bugs were caught by screenshots and fixed: (a) an over-eager minimum distance produced an uncomfortable face-closeup, (b) clamping *up* to a minimum could place the camera **behind** the obstacle and render its interior as a full-screen blob.
+- [x] **Title screen now shows the live drifting-island world.** The menu scrim became translucent, so the real orbiting world (islands, cherry canopies, waterfalls) renders behind the title instead of a flat gradient. Title text turned white with a shadow to stay legible.
+- [x] **Grass varies per blade** — randomised height, lean, spin, and a colour blend between the biome's tuft and grass tones, so the field no longer looks stamped.
+- [x] **Bloom-lite on collectibles.** Additive radial-gradient halos on seeds, stars, rings and moonpetals — the glow a post-processing bloom would give, at a fraction of the cost.
+- [x] **Sun was a hard-edged flat disc washing out the screen — FIXED.** A `CircleGeometry` sun+glow rendered as a giant pale sticker over the world (caught in a screenshot). Replaced with soft radial-gradient additive planes that fade out naturally.
+- [x] **Decorative sprites no longer break raycasts.** The new halos were being hit by the camera and build raycasters — this spammed console errors and **broke build placement entirely**. Halos, sun and sky dome are now excluded from all raycasts. *(Caught by the regression suite, not by eye.)*
+- [ ] Water/waterfalls are static ribbons — no flow animation.
+- [ ] No wind motion on grass or canopies (variation is static).
+- [ ] Shadows are only cast by the sun light; no ambient occlusion contact shading.
+
+## 🛒 Economy & dungeons (new direction — replaces the scrapped time-token)
+
+**Decision:** an on-chain *play-time* token was designed and then **scrapped** — metering or
+selling a child's play-time carries real legal risk. The main open world stays free and
+unlimited. Only optional extras cost anything, and only in devnet test currency.
+
+- [x] **SEED shop currency proven on devnet** — full loop executed on-chain: starter grant → buy a skin (transfer) → refill dungeon energy (burn). Balances reconcile. See [`PROOF-DEVNET.md`](PROOF-DEVNET.md).
+- [ ] In-game shop UI (browse skins, see prices, confirm purchase).
+- [ ] Energy/resin meter in the HUD, consumed on dungeon entry only.
+- [ ] Dungeons themselves — the content energy is spent on does not exist yet.
+- [ ] Skin ownership recorded as an attestation the child keeps.
+- [ ] Parent-side spending limits and a purchase history in the family dashboard.
 
 ## 🟡 Performance and robustness
 
