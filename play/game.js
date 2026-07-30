@@ -46,16 +46,32 @@ const skyDome = new THREE.Mesh(
 skyDome.renderOrder = -1;
 scene.add(skyDome);
 
-// a soft sun disc + glow high in the sky, so there is a warm focal point
+// one soft radial-gradient texture, reused by the sun and by collectible halos.
+// a flat disc with a hard rim reads as a pale sticker over the world; a gradient fades out.
+function radialGlowTex(innerStop) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(innerStop, 'rgba(255,255,255,0.5)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const sunTex = radialGlowTex(0.28);
+
+// a soft sun disc + halo high in the sky, so there is a warm focal point
 const sunSprite = new THREE.Mesh(
-  new THREE.CircleGeometry(14, 32),
-  new THREE.MeshBasicMaterial({ color: 0xfff6e0, transparent: true, opacity: 0.9, fog: false, depthWrite: false })
+  new THREE.PlaneGeometry(16, 16),
+  new THREE.MeshBasicMaterial({ map: sunTex, color: 0xfff6e0, transparent: true, opacity: 0.75, fog: false, depthWrite: false, blending: THREE.AdditiveBlending })
 );
 const sunGlow = new THREE.Mesh(
-  new THREE.CircleGeometry(30, 32),
-  new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.28, fog: false, depthWrite: false })
+  new THREE.PlaneGeometry(46, 46),
+  new THREE.MeshBasicMaterial({ map: sunTex, color: 0xffe9b8, transparent: true, opacity: 0.22, fog: false, depthWrite: false, blending: THREE.AdditiveBlending })
 );
 sunSprite.renderOrder = -1; sunGlow.renderOrder = -1;
+// backdrop only — must never register as an obstacle for camera or build raycasts
+sunSprite.raycast = () => {}; sunGlow.raycast = () => {}; skyDome.raycast = () => {};
 scene.add(sunGlow); scene.add(sunSprite);
 
 addEventListener('resize', () => {
@@ -302,23 +318,16 @@ const ringMat = new THREE.MeshBasicMaterial({ color: 0x8af0d8 });
 seedMat.userData.shared = starMat.userData.shared = ringMat.userData.shared = true;
 
 // sparks are worth: seed 1, ring 2, star 3 — the single currency that drives unlocks
-// soft radial glow texture, built once, reused for every collectible halo (bloom-lite)
-const glowTex = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 64;
-  const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-})();
+// collectible halos reuse the same soft radial falloff as the sun (bloom-lite)
+const glowTex = radialGlowTex(0.35);
 function glowSprite(color, size) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({
     map: glowTex, color, blending: THREE.AdditiveBlending, transparent: true,
     depthWrite: false, opacity: 0.85, fog: false
   }));
   sp.scale.setScalar(size);
+  // purely decorative: never let a halo block build placement or the camera ray
+  sp.raycast = () => {};
   return sp;
 }
 function addSeed(isl, ox, oz) {
