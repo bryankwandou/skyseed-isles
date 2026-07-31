@@ -488,7 +488,7 @@ const UNLOCKS = [
 ];
 
 const SAVE_KEY = 'skyseed_save_v1';
-let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0 };
+let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [] };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
@@ -741,13 +741,18 @@ function grantPetXp(n) {
 const RIDE_LEVEL = 4;
 let riding = null, rideLift = 0;
 
+// Nearest buddy in range, but a ride-ready one always wins over a smaller one:
+// with a Lv8 friend and a brand-new Lv1 friend both nearby, pressing R should ride,
+// not refuse because the little one happened to be a step closer.
 function nearestPet(maxDist) {
-  let best = null, bd = maxDist;
+  let best = null, bd = maxDist;          // best ride-ready buddy
+  let any = null, ad = maxDist;           // best buddy of any level
   for (const p of pets) {
     const d = Math.hypot(p.g.position.x - player.position.x, p.g.position.z - player.position.z);
-    if (d < bd) { bd = d; best = p; }
+    if (d < ad) { ad = d; any = p; }
+    if (p.level >= RIDE_LEVEL && d < bd) { bd = d; best = p; }
   }
-  return best;
+  return best || any;
 }
 
 function toggleRide() {
@@ -926,7 +931,7 @@ function clearBuilds() {
 
 function applyServerProgress(p) {
   if (!p || typeof p !== 'object') return;
-  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0 }, p);
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [] }, p);
   for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
   clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name, pet.happy);
   clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
@@ -979,6 +984,10 @@ function mergeProgress(a, b) {
     builds: longer('builds'),
     treasures: num('treasures'), shinies: num('shinies'), bops: num('bops'),
     berries: num('berries'),
+    // shop economy: keep the larger purse, the fuller energy, and every skin ever bought
+    seeds: num('seeds'),
+    energy: Math.max(a.energy ?? 5, b.energy ?? 5),
+    skins: union('skins'),
     quest: { i: Math.max((a.quest && a.quest.i) || 0, (b.quest && b.quest.i) || 0), base: null },
     // prefer a chosen cosmetic over "none"
     wardrobe: { hat: (wb.hat && wb.hat !== 'none') ? wb.hat : (wa.hat || 'none'),
@@ -1256,7 +1265,11 @@ const WARDROBE = {
     { id: 'dress',  name: 'Sky Dress',     need: () => true,                                 req: '' },
     { id: 'meadow', name: 'Meadow Tunic',  need: () => progress.biomes.length >= 2,          req: 'Discover 2 regions' },
     { id: 'sunset', name: 'Sunset Gown',   need: () => progress.sparks >= 40,                req: 'Collect 40 sparks' },
-    { id: 'star',   name: 'Starlight Robe', need: () => (progress.wonders || []).length >= 1, req: 'Find a Great Tree' }
+    { id: 'star',   name: 'Starlight Robe', need: () => (progress.wonders || []).length >= 1, req: 'Find a Great Tree' },
+    // bought in the Seed Shop with Seeds earned in game (never with real money)
+    { id: 'aurora',  name: 'Aurora Skin',  need: () => ownsSkin('aurora'),  req: 'Buy in the Seed Shop' },
+    { id: 'lantern', name: 'Lantern Skin', need: () => ownsSkin('lantern'), req: 'Buy in the Seed Shop' },
+    { id: 'comet',   name: 'Comet Skin',   need: () => ownsSkin('comet'),   req: 'Buy in the Seed Shop' }
   ],
   hat: [
     { id: 'none',   name: 'No hat',       need: () => true, req: '' },
@@ -1278,7 +1291,10 @@ function makeOutfit(id) {
     dress:  { body: 0x7fb0e8, skirt: 0x6a9fe0, trim: 0xffffff },
     meadow: { body: 0x8fd6a0, skirt: 0x74c58a, trim: 0xfff2c0 },
     sunset: { body: 0xffa9c4, skirt: 0xf58fb2, trim: 0xffe6a0 },
-    star:   { body: 0x8f8ff0, skirt: 0x6f6fd8, trim: 0xfff2a0 }
+    star:   { body: 0x8f8ff0, skirt: 0x6f6fd8, trim: 0xfff2a0 },
+    aurora:  { body: 0x7fe8d0, skirt: 0x5fc9c0, trim: 0xdfffff },
+    lantern: { body: 0xffb066, skirt: 0xef8f4a, trim: 0xfff0c0 },
+    comet:   { body: 0x5f6f9f, skirt: 0x46527a, trim: 0xa8d8ff }
   }[id] || { body: 0x7fb0e8, skirt: 0x6a9fe0, trim: 0xffffff };
   const g = new THREE.Group();
   const bodyMat = new THREE.MeshToonMaterial({ color: palette.body });
@@ -1427,6 +1443,99 @@ const wardrobeClose = $('wardrobeClose');
 if (wardrobeClose) wardrobeClose.addEventListener('click', closeWardrobe);
 applyWardrobe();
 
+// ---------- Seed Shop ----------
+// Seeds are earned by playing; there is no way to buy them with real money. The open
+// world costs nothing — Seeds only pay for looks and for optional dungeon trips.
+const ENERGY_MAX = 5;
+const REFILL_COST = 12;
+const SHOP_SKINS = [
+  { id: 'aurora',  name: 'Aurora Skin',  price: 30 },
+  { id: 'lantern', name: 'Lantern Skin', price: 45 },
+  { id: 'comet',   name: 'Comet Skin',   price: 60 }
+];
+
+function ownsSkin(id) { return (progress.skins || []).includes(id); }
+
+function updateShopHud() {
+  const s = $('cSeed'); if (s) s.textContent = progress.seeds || 0;
+  const e = $('cEnergy');
+  if (e) e.textContent = (progress.energy ?? ENERGY_MAX) + '/' + ENERGY_MAX;
+  const ss = $('shopSeeds'); if (ss) ss.textContent = progress.seeds || 0;
+  const se = $('shopEnergy');
+  if (se) se.textContent = (progress.energy ?? ENERGY_MAX) + '/' + ENERGY_MAX;
+}
+
+function buyRefill() {
+  const cost = REFILL_COST;
+  if ((progress.energy ?? ENERGY_MAX) >= ENERGY_MAX) { say(L('Your energy is already full.')); return; }
+  if ((progress.seeds || 0) < cost) { say(L('Not enough Seeds yet — keep exploring!')); return; }
+  progress.seeds -= cost;
+  progress.energy = Math.min(ENERGY_MAX, (progress.energy ?? ENERGY_MAX) + 1);
+  saveProgress(); chime(980); updateShopHud(); renderShop();
+  say(L('Energy refilled! {n} left in the purse.', { n: progress.seeds }));
+}
+
+function buySkin(item) {
+  if (ownsSkin(item.id)) { say(L('You already own that one.')); return; }
+  if ((progress.seeds || 0) < item.price) { say(L('Not enough Seeds yet — keep exploring!')); return; }
+  progress.seeds -= item.price;
+  progress.skins = [...(progress.skins || []), item.id];
+  saveProgress(); chime(1180); updateShopHud(); renderShop();
+  burst(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), 0xffe08a, 18);
+  say(L('{name} unlocked! Put it on in the 👒 wardrobe.', { name: L(item.name) }));
+}
+
+function shopRow(label, priceText, btnLabel, enabled, onBuy, owned) {
+  const row = document.createElement('div');
+  row.className = 'shopRow' + (owned ? ' owned' : '');
+  const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = label;
+  const pr = document.createElement('span'); pr.className = 'pr'; pr.textContent = priceText;
+  row.append(nm, pr);
+  if (!owned) {
+    const b = document.createElement('button');
+    b.className = 'shopBuy'; b.textContent = btnLabel;
+    if (enabled) b.addEventListener('click', onBuy);
+    else { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
+    row.appendChild(b);
+  }
+  return row;
+}
+
+function renderShop() {
+  updateShopHud();
+  const eBox = $('shopEnergyBox');
+  if (eBox) {
+    eBox.innerHTML = '';
+    const full = (progress.energy ?? ENERGY_MAX) >= ENERGY_MAX;
+    const afford = (progress.seeds || 0) >= REFILL_COST;
+    eBox.appendChild(shopRow(
+      L('Refill 1 energy'),
+      full ? L('Full') : REFILL_COST + ' 🌰',
+      L('Refill'), !full && afford, buyRefill, false
+    ));
+  }
+  const sBox = $('shopSkinBox');
+  if (sBox) {
+    sBox.innerHTML = '';
+    for (const item of SHOP_SKINS) {
+      const owned = ownsSkin(item.id);
+      sBox.appendChild(shopRow(
+        L(item.name),
+        owned ? L('Owned') : item.price + ' 🌰',
+        L('Buy'), (progress.seeds || 0) >= item.price, () => buySkin(item), owned
+      ));
+    }
+  }
+}
+
+function openShop() { renderShop(); const el = $('shop'); if (el) el.classList.add('on'); }
+function closeShop() { const el = $('shop'); if (el) el.classList.remove('on'); }
+const shopBtn = $('shopBtn');
+if (shopBtn) shopBtn.addEventListener('click', openShop);
+const shopCloseBtn = $('shopClose');
+if (shopCloseBtn) shopCloseBtn.addEventListener('click', closeShop);
+updateShopHud();
+
 // ---------- PWA: register the service worker (installable app) ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* optional */ });
@@ -1446,6 +1555,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyK') { const w = $('wardrobe'); if (w && w.classList.contains('on')) closeWardrobe(); else openWardrobe(); }
   if (e.code === 'KeyN') { const bp = $('buddyPanel'); if (bp && bp.classList.contains('on')) closeBuddyPanel(); else openBuddyPanel(); }
   if (e.code === 'KeyM') { const mp = $('mapWrap'); if (mp) mp.classList.toggle('big'); }
+  if (e.code === 'KeyT') { const sh = $('shop'); if (sh && sh.classList.contains('on')) closeShop(); else openShop(); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
@@ -1930,6 +2040,9 @@ function animate() {
         } else {
           chime(c.kind === 'seed' ? 880 : c.kind === 'ring' ? 740 : 990);
         }
+        // rarer pickups also pay Seeds — the shop purse. Never bought with real money.
+        const seedPay = c.kind === 'petal' ? 5 : c.kind === 'star' ? 2 : c.kind === 'ring' ? 1 : 0;
+        if (seedPay) { progress.seeds = (progress.seeds || 0) + seedPay; updateShopHud(); }
         if (navigator.vibrate) navigator.vibrate(12);
         // seeds sometimes hide a berry — food to feed your buddies
         if (c.kind === 'seed' && Math.random() < 0.28) {
