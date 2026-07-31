@@ -111,6 +111,8 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 - [x] **Bloom-lite on collectibles.** Additive radial-gradient halos on seeds, stars, rings and moonpetals — the glow a post-processing bloom would give, at a fraction of the cost.
 - [x] **Sun was a hard-edged flat disc washing out the screen — FIXED.** A `CircleGeometry` sun+glow rendered as a giant pale sticker over the world (caught in a screenshot). Replaced with soft radial-gradient additive planes that fade out naturally.
 - [x] **Decorative sprites no longer break raycasts.** The new halos were being hit by the camera and build raycasters — this spammed console errors and **broke build placement entirely**. Halos, sun and sky dome are now excluded from all raycasts. *(Caught by the regression suite, not by eye.)*
+- [x] **Sun no longer washes out the scene** *(see the sun entry above)*.
+- [x] **Teleport camera fixed.** Entering a rift left the camera easing across the whole gap — measured **7,542 units behind the player**, so the room rendered as an empty screen. The camera now snaps on teleport (re-measured: 8.5). Found by probing real state through a test hook, not by guessing.
 - [ ] Water/waterfalls are static ribbons — no flow animation.
 - [ ] No wind motion on grass or canopies (variation is static).
 - [ ] Shadows are only cast by the sun light; no ambient occlusion contact shading.
@@ -122,11 +124,16 @@ selling a child's play-time carries real legal risk. The main open world stays f
 unlimited. Only optional extras cost anything, and only in devnet test currency.
 
 - [x] **SEED shop currency proven on devnet** — full loop executed on-chain: starter grant → buy a skin (transfer) → refill dungeon energy (burn). Balances reconcile. See [`PROOF-DEVNET.md`](PROOF-DEVNET.md).
-- [ ] In-game shop UI (browse skins, see prices, confirm purchase).
-- [ ] Energy/resin meter in the HUD, consumed on dungeon entry only.
-- [ ] Dungeons themselves — the content energy is spent on does not exist yet.
-- [ ] Skin ownership recorded as an attestation the child keeps.
-- [ ] Parent-side spending limits and a purchase history in the family dashboard.
+- [x] **In-game shop (Seed Shop, key `T`)** — wallet strip, energy refill, three buyable skins, plain kid wording. Bought skins unlock as wearable outfits in the wardrobe. Covered by `test/shop.test.mjs`.
+- [x] **Seeds have a source** — rarer pickups pay out (ring 1, star 2, moonpetal 5). There is no real-money path, by design.
+- [x] **Energy meter in the HUD**, spent only on entering a rift.
+- [x] **Sky Rift dungeons exist** — a room outside the streamed world with six crystals, a glowing core, and a reward chest (+25 Seeds). No enemies, no timer, no losing. Covered by `test/dungeon.test.mjs`.
+- [ ] Only one rift layout — every run is the same room. Needs procedural variety.
+- [ ] Rifts are entered from a HUD button anywhere; there is no rift *gate* object in the world to walk into.
+- [ ] Energy never regenerates over time — the only way back up is the shop. Should refill slowly on its own.
+- [ ] Skin ownership is local only; not yet recorded as an on-chain attestation.
+- [ ] Shop purchases in game are local — the proven devnet loop is not yet wired to the buy buttons.
+- [ ] Parent-side spending limits and purchase history in the family dashboard.
 
 ## 🟡 Performance and robustness
 
