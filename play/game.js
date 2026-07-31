@@ -488,7 +488,7 @@ const UNLOCKS = [
 ];
 
 const SAVE_KEY = 'skyseed_save_v1';
-let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [] };
+let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0 };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
@@ -931,7 +931,7 @@ function clearBuilds() {
 
 function applyServerProgress(p) {
   if (!p || typeof p !== 'object') return;
-  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [] }, p);
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0 }, p);
   for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
   clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name, pet.happy);
   clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
@@ -988,6 +988,7 @@ function mergeProgress(a, b) {
     seeds: num('seeds'),
     energy: Math.max(a.energy ?? 5, b.energy ?? 5),
     skins: union('skins'),
+    dungeonsCleared: num('dungeonsCleared'),
     quest: { i: Math.max((a.quest && a.quest.i) || 0, (b.quest && b.quest.i) || 0), base: null },
     // prefer a chosen cosmetic over "none"
     wardrobe: { hat: (wb.hat && wb.hat !== 'none') ? wb.hat : (wa.hat || 'none'),
@@ -1030,6 +1031,7 @@ function openJournal() {
   $('jBops').textContent = progress.bops || 0;
   $('jBuilds').textContent = (progress.builds || []).length;
   $('jQuests').textContent = Math.min(progress.quest.i, QUESTS.length) + ' / ' + QUESTS.length;
+  const jr = $('jRifts'); if (jr) jr.textContent = progress.dungeonsCleared || 0;
   el.classList.add('on');
 }
 function closeJournal() { const el = $('journal'); if (el) el.classList.remove('on'); }
@@ -1536,6 +1538,181 @@ const shopCloseBtn = $('shopClose');
 if (shopCloseBtn) shopCloseBtn.addEventListener('click', closeShop);
 updateShopHud();
 
+// ---------- Sky Rift dungeons ----------
+// A dungeon is a calm collection challenge, not a fight: no enemies, no timer, no way to
+// lose. It sits far outside the streamed world so entering never disturbs the open world;
+// chunk streaming is frozen while inside and the player is teleported straight back out.
+const DUNGEON_X = 100000, DUNGEON_Z = 100000;
+const DUNGEON_CRYSTALS = 6;
+let inDungeon = false;
+let dungeonGroup = null, dungeonIsland = null;
+let dungeonFound = 0, dungeonReturn = null, dungeonChest = null;
+
+function clearDungeon() {
+  if (dungeonGroup) {
+    dungeonGroup.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material && !o.material.userData.shared) o.material.dispose();
+    });
+    scene.remove(dungeonGroup);
+  }
+  dungeonGroup = null; dungeonChest = null;
+  // drop any dungeon pickups still lying around
+  for (let i = collect.length - 1; i >= 0; i--) {
+    if (collect[i].kind === 'dcrystal') { scene.remove(collect[i].mesh); collect.splice(i, 1); }
+  }
+  if (dungeonIsland) {
+    const ix = islands.indexOf(dungeonIsland);
+    if (ix >= 0) islands.splice(ix, 1);
+    dungeonIsland = null;
+  }
+}
+
+function buildDungeon() {
+  const g = new THREE.Group();
+  g.position.set(DUNGEON_X, 0, DUNGEON_Z);
+  const R = 15;
+  const floorMat = new THREE.MeshToonMaterial({ color: 0x6a5f9a });
+  const rimMat = new THREE.MeshToonMaterial({ color: 0x8f7fd0 });
+  const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 0.9, 1.2, 32), floorMat);
+  floor.position.y = -0.6; floor.receiveShadow = true; g.add(floor);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.5, 8, 40), rimMat);
+  rim.rotation.x = Math.PI / 2; g.add(rim);
+  // a glowing core in the middle so the room always has a warm focal point
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1),
+    new THREE.MeshBasicMaterial({ color: 0x9ad8ff }));
+  core.position.y = 3.4; g.add(core);
+  core.add(new THREE.PointLight(0x9ad8ff, 1.4, 26));
+  core.add(glowSprite(0x9ad8ff, 6));
+  // pillars around the ring, each holding one crystal
+  for (let i = 0; i < DUNGEON_CRYSTALS; i++) {
+    const a = i / DUNGEON_CRYSTALS * Math.PI * 2;
+    const px = Math.cos(a) * (R - 4), pz = Math.sin(a) * (R - 4);
+    const h = 2 + (i % 3);
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, h, 8), rimMat);
+    p.position.set(px, h / 2, pz); p.castShadow = true; g.add(p);
+    const cm = new THREE.Mesh(new THREE.OctahedronGeometry(0.45),
+      new THREE.MeshBasicMaterial({ color: 0xa8f0ff }));
+    cm.position.set(DUNGEON_X + px, h + 0.9, DUNGEON_Z + pz);
+    cm.add(glowSprite(0xa8f0ff, 2.2));
+    scene.add(cm);
+    collect.push({ mesh: cm, kind: 'dcrystal', r: 1.3, worth: 2 });
+  }
+  scene.add(g);
+  dungeonGroup = g;
+  // register as ground so the existing collision keeps Miru standing on the floor
+  dungeonIsland = { x: DUNGEON_X, z: DUNGEON_Z, y: 0, r: R, group: g,
+    biome: BIOMES[6], collect: [], slimes: [] };
+  islands.push(dungeonIsland);
+}
+
+function spawnDungeonChest() {
+  if (dungeonChest || !dungeonGroup) return;
+  const chest = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 1.1),
+    new THREE.MeshToonMaterial({ color: 0xc9954e }));
+  box.position.y = 0.55; chest.add(box);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.3, 1.2),
+    new THREE.MeshToonMaterial({ color: 0xffd98a }));
+  lid.position.y = 1.2; chest.add(lid);
+  chest.add(glowSprite(0xffd98a, 4));
+  chest.position.set(0, 0, 0);
+  dungeonGroup.add(chest);
+  dungeonChest = chest;
+  say(L('The rift chest opened! Walk into it.'));
+}
+
+function onDungeonCrystal() {
+  dungeonFound++;
+  updateDungeonHud();
+  if (dungeonFound >= DUNGEON_CRYSTALS) {
+    spawnDungeonChest();
+    chime(1400);
+  } else {
+    say(L('Sky crystal {n} of {t}!', { n: dungeonFound, t: DUNGEON_CRYSTALS }));
+  }
+}
+
+function claimDungeonReward() {
+  const pay = 25;
+  progress.seeds = (progress.seeds || 0) + pay;
+  progress.dungeonsCleared = (progress.dungeonsCleared || 0) + 1;
+  saveProgress(); updateShopHud();
+  burst(player.position.clone().add(new THREE.Vector3(0, 1.5, 0)), 0xffd98a, 26);
+  chime(1500);
+  say(L('Rift cleared! +{n} Seeds. Well done!', { n: pay }));
+  setTimeout(() => exitDungeon(true), 1800);
+}
+
+function updateDungeonHud() {
+  const box = $('dungeonHud');
+  if (!box) return;
+  box.classList.toggle('on', inDungeon);
+  const c = $('dgCount');
+  if (c) c.textContent = dungeonFound + '/' + DUNGEON_CRYSTALS;
+}
+
+function enterDungeon() {
+  if (inDungeon) return;
+  if ((progress.energy ?? ENERGY_MAX) < 1) {
+    say(L('No energy left — refill in the 🌰 shop or come back later.'));
+    return;
+  }
+  progress.energy = (progress.energy ?? ENERGY_MAX) - 1;
+  saveProgress(); updateShopHud();
+  dungeonReturn = player.position.clone();
+  inDungeon = true; dungeonFound = 0;
+  buildDungeon();
+  riding = null;
+  player.position.set(DUNGEON_X, 0, DUNGEON_Z + 10);
+  spawn.set(DUNGEON_X, 0, DUNGEON_Z + 10);
+  camSnap = true;
+  updateDungeonHud();
+  chime(720);
+  say(L('You stepped into a Sky Rift. Find {n} sky crystals!', { n: DUNGEON_CRYSTALS }));
+}
+
+function exitDungeon(cleared) {
+  if (!inDungeon) return;
+  inDungeon = false;
+  clearDungeon();
+  const back = dungeonReturn || new THREE.Vector3(0, 0, 3);
+  player.position.copy(back).add(new THREE.Vector3(0, 1, 0));
+  spawn.copy(back);
+  camSnap = true;
+  lastCX = 1e9; lastCZ = 1e9;                 // force the world to stream back in
+  ensureChunks(player.position.x, player.position.z);
+  updateDungeonHud();
+  if (!cleared) say(L('You slipped back out of the rift.'));
+}
+
+// test hook: lets the headless suite inspect dungeon state without guessing
+window.__sky = {
+  state: () => ({
+    inDungeon,
+    found: dungeonFound,
+    player: [player.position.x, player.position.y, player.position.z].map(n => +n.toFixed(2)),
+    camera: [camera.position.x, camera.position.y, camera.position.z].map(n => +n.toFixed(2)),
+    roomAt: dungeonGroup ? [dungeonGroup.position.x, dungeonGroup.position.y, dungeonGroup.position.z] : null,
+    crystals: collect.filter(c => c.kind === 'dcrystal').length,
+    ground: groundHeight(player.position.x, player.position.z)
+  }),
+  // teleport onto a crystal so pickup can be tested without pathfinding
+  toCrystal: () => {
+    const c = collect.find(c => c.kind === 'dcrystal');
+    if (!c) return false;
+    player.position.set(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z);
+    return true;
+  },
+  toChest: () => { player.position.set(DUNGEON_X, 0, DUNGEON_Z); }
+};
+
+const dungeonBtn = $('dungeonBtn');
+if (dungeonBtn) dungeonBtn.addEventListener('click', () => inDungeon ? exitDungeon(false) : enterDungeon());
+const dgLeave = $('dgLeave');
+if (dgLeave) dgLeave.addEventListener('click', () => exitDungeon(false));
+updateDungeonHud();
+
 // ---------- PWA: register the service worker (installable app) ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* optional */ });
@@ -1561,6 +1738,8 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 
 // --- free-look camera state ---
 let camYaw = 0, camPitch = 0.32, camDist = 9;
+// set true whenever the player is teleported, so the camera lands instead of flying there
+let camSnap = false;
 const isTouch = matchMedia('(pointer:coarse)').matches;
 // raycaster used to keep the camera from clipping through trees/decorations
 const camRay = new THREE.Raycaster();
@@ -1894,9 +2073,13 @@ function animate() {
     player.position.z += vel.z * dt;
     player.position.y += vel.y * dt;
 
-    // stream new islands in / far ones out, and greet new biomes
-    ensureChunks(player.position.x, player.position.z);
-    checkBiome(player.position.x, player.position.z);
+    // stream new islands in / far ones out, and greet new biomes.
+    // inside a dungeon the world is frozen: the room sits far outside the streamed
+    // area, so generating chunks around it would build a whole second world.
+    if (!inDungeon) {
+      ensureChunks(player.position.x, player.position.z);
+      checkBiome(player.position.x, player.position.z);
+    }
     // gentle day/night: 5-minute cycle, never darker than dusk (kid-safe)
     const dayF = 0.66 + 0.34 * Math.sin(t * Math.PI * 2 / 300);
     sun.intensity = 2.2 * dayF;
@@ -2043,6 +2226,8 @@ function animate() {
         // rarer pickups also pay Seeds — the shop purse. Never bought with real money.
         const seedPay = c.kind === 'petal' ? 5 : c.kind === 'star' ? 2 : c.kind === 'ring' ? 1 : 0;
         if (seedPay) { progress.seeds = (progress.seeds || 0) + seedPay; updateShopHud(); }
+        if (c.kind === 'dcrystal') onDungeonCrystal();
+
         if (navigator.vibrate) navigator.vibrate(12);
         // seeds sometimes hide a berry — food to feed your buddies
         if (c.kind === 'seed' && Math.random() < 0.28) {
@@ -2051,6 +2236,15 @@ function animate() {
           if (pets.length) tip('berry', L('You found a berry! Feed it to a buddy in the 🐾 panel.'));
         }
         addSparks(c.worth);
+      }
+    }
+
+    // walking into the rift chest claims the reward (once)
+    if (inDungeon && dungeonChest && !dungeonChest.userData.claimed) {
+      const cx = DUNGEON_X, cz = DUNGEON_Z;
+      if (Math.hypot(player.position.x - cx, player.position.z - cz) < 2.2) {
+        dungeonChest.userData.claimed = true;
+        claimDungeonReward();
       }
     }
 
@@ -2196,7 +2390,10 @@ function animate() {
         }
       }
     }
-    camera.position.lerp(target, 0.35);
+    // normally the camera eases toward its target, but after a teleport it must land
+    // instantly — otherwise it slides across the whole gap in view of the player
+    if (camSnap) { camera.position.copy(target); camSnap = false; }
+    else camera.position.lerp(target, 0.35);
   } else {
     camera.position.set(Math.sin(t * 0.15) * 22, 10, Math.cos(t * 0.15) * 22);
   }
