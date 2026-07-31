@@ -104,7 +104,7 @@
     color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; user-select:none;
   }
-  #buddyBtn, #photoBtn, #shopBtn {
+  #buddyBtn, #photoBtn, #shopBtn, #dungeonBtn {
     position:fixed; z-index:22; left:12px; width:44px; height:44px;
     border-radius:12px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
     color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
@@ -113,6 +113,22 @@
   #buddyBtn { top:272px; }
   #photoBtn { top:326px; }
   #shopBtn { top:380px; }
+  #dungeonBtn { top:434px; }
+  /* dungeon run banner */
+  #dungeonHud {
+    position:fixed; z-index:16; top:12px; left:50%; transform:translateX(-50%);
+    display:none; align-items:center; gap:12px;
+    background:rgba(40,30,70,.78); backdrop-filter:blur(8px); color:#fff;
+    border-radius:14px; padding:9px 16px; font-size:14px; font-weight:600;
+    box-shadow:0 4px 18px rgba(20,10,50,.35);
+  }
+  #dungeonHud.on { display:flex; }
+  #dungeonHud b { font-variant-numeric:tabular-nums; color:#a8f0ff; }
+  #dgLeave {
+    border:none; cursor:pointer; color:#3a2b60; background:#e9dcff;
+    font-weight:700; font-size:12.5px; padding:7px 12px; border-radius:9px; min-height:34px;
+  }
+  #dgLeave:focus-visible { outline:3px solid #fff; outline-offset:2px; }
   /* minimap */
   #mapWrap {
     position:fixed; z-index:12; right:12px; bottom:12px; width:132px; height:132px;
@@ -153,7 +169,7 @@
   /* photo mode */
   body.photo #hud, body.photo #accountBar, body.photo #help, body.photo #buildBtn,
   body.photo #careBtn, body.photo #rideBtn, body.photo #pauseBtn, body.photo #journalBtn,
-  body.photo #wardrobeBtn, body.photo #buddyBtn, body.photo #photoBtn, body.photo #shopBtn, body.photo #mapWrap,
+  body.photo #wardrobeBtn, body.photo #buddyBtn, body.photo #photoBtn, body.photo #shopBtn, body.photo #dungeonBtn, body.photo #dungeonHud, body.photo #mapWrap,
   body.photo #talkBtn, body.photo #palette, body.photo #stick, body.photo .tbtn { display:none !important; }
   #photoBar { position:fixed; z-index:40; left:50%; bottom:24px; transform:translateX(-50%); display:none; gap:10px; }
   body.photo #photoBar { display:flex; }
@@ -359,6 +375,11 @@
 <button id="buddyBtn" aria-label="Buddies" data-i18n-aria="Your Buddies">🐾</button>
 <button id="photoBtn" aria-label="Photo mode" data-i18n-aria="Photo">📷</button>
 <button id="shopBtn" aria-label="Seed Shop" data-i18n-aria="Seed Shop">🌰</button>
+<button id="dungeonBtn" aria-label="Sky Rift" data-i18n-aria="Sky Rift">🌀</button>
+<div id="dungeonHud">
+  <span><span data-i18n="Sky crystals">Sky crystals</span> <b id="dgCount">0/6</b></span>
+  <button id="dgLeave" data-i18n="Leave rift">Leave rift</button>
+</div>
 <div id="mapWrap" aria-hidden="true"><canvas id="map" width="132" height="132"></canvas></div>
 <div id="photoBar">
   <button id="snapBtn" data-i18n="Snap">Snap</button>
@@ -422,6 +443,7 @@
     <div class="jRow"><span data-i18n="Slimes bopped">Slimes bopped</span><b id="jBops">0</b></div>
     <div class="jRow"><span data-i18n="Decorations placed">Decorations placed</span><b id="jBuilds">0</b></div>
     <div class="jRow"><span data-i18n="Skykeeper quests">Skykeeper quests</span><b id="jQuests">0</b></div>
+    <div class="jRow"><span data-i18n="Rifts cleared">Rifts cleared</span><b id="jRifts">0</b></div>
     <button id="journalClose" data-i18n="Close (J)">Close (J)</button>
   </div>
 </div>
