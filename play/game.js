@@ -488,7 +488,7 @@ const UNLOCKS = [
 ];
 
 const SAVE_KEY = 'skyseed_save_v1';
-let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0 };
+let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0, energyAt: 0, waypoints: [], riftTier: 1 };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
@@ -602,11 +602,95 @@ function generateCell(cx, cz) {
     const isl = makeIsland(x, y, z, r, biomeFor(x, z), rand);
     if (isWonder && i === 0) { makeWonder(isl, rand); isl.key = cx + ',' + cz; }
     decorate(isl, rand);
+    // landmarks: a rift gate to enter a dungeon, and a waypoint to travel back to.
+    // Both are keyed off the cell hash, so the same cell always holds the same landmark.
+    if (i === 0 && !isWonder) {
+      if (hash2(cx * 13 + 7, cz * 17 + 1) % 11 === 0) makeRiftGate(isl);
+      else if (hash2(cx * 5 - 9, cz * 23 + 4) % 9 === 0) makeWaypoint(isl, cx, cz);
+    }
     list.push(isl);
   }
 }
 
+// ---------- world landmarks: rift gates and waypoints ----------
+// Standard open-world furniture: a gate you walk into to start a dungeon, and a waypoint
+// you touch once to unlock fast travel back to it.
+const gates = [], waypoints = [];
+
+function makeRiftGate(isl) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshToonMaterial({ color: 0x8f7fd0 });
+  const arch = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.28, 8, 24), mat);
+  arch.position.y = 2.0; arch.castShadow = true; g.add(arch);
+  // The portal reads as a *hole*, not a lamp. An additive disc over the pale daytime sky
+  // saturates to white and looks like a grey sticker pasted behind the arch (this was the
+  // exact bug a screenshot caught). So: a dark indigo disc for contrast, with a small
+  // additive swirl on top for the glow. Dark-on-light is what makes it legible to a child.
+  const portal = new THREE.Mesh(new THREE.CircleGeometry(1.62, 28),
+    new THREE.MeshBasicMaterial({
+      color: 0x241a4a, transparent: true, opacity: 0.88, fog: false,
+      depthWrite: false, side: THREE.DoubleSide
+    }));
+  portal.position.y = 2.0; portal.raycast = () => {}; g.add(portal);
+  const swirl = new THREE.Mesh(new THREE.CircleGeometry(1.45, 24),
+    new THREE.MeshBasicMaterial({
+      map: glowTex, color: 0x7fd0ff, transparent: true, opacity: 0.55, fog: false,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+    }));
+  swirl.position.set(0, 2.0, 0.02); swirl.raycast = () => {}; g.add(swirl);
+  for (const s of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 2.1, 7), mat);
+    leg.position.set(s * 1.72, 1.05, 0); leg.castShadow = true; g.add(leg);
+  }
+  // small, dim rim halo — a 4.5-unit one blew out into a giant pale square over the sky
+  const halo = glowSprite(0xa8c8ff, 2.4);
+  halo.material.opacity = 0.45; halo.position.y = 2.0; g.add(halo);
+  g.position.set(isl.x, isl.y, isl.z);
+  scene.add(g);
+  isl.gate = { x: isl.x, y: isl.y, z: isl.z, group: g, portal, swirl };
+  gates.push(isl.gate);
+}
+
+function makeWaypoint(isl, cx, cz) {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshToonMaterial({ color: 0xd9d2c4 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.5, 0.4, 10), stone);
+  base.position.y = 0.2; base.receiveShadow = true; g.add(base);
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.55, 2.6, 8), stone);
+  pillar.position.y = 1.6; pillar.castShadow = true; g.add(pillar);
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.6),
+    new THREE.MeshBasicMaterial({ color: 0x8fd0f5 }));
+  crystal.position.y = 3.4; g.add(crystal);
+  const halo = glowSprite(0x8fd0f5, 3);
+  halo.position.y = 3.4; g.add(halo);
+  g.position.set(isl.x, isl.y, isl.z);
+  scene.add(g);
+  const name = (isl.biome && isl.biome.name ? isl.biome.name : 'Waypoint') + ' ' + cx + ',' + cz;
+  isl.waypoint = { x: isl.x, y: isl.y, z: isl.z, name, group: g, crystal, halo };
+  waypoints.push(isl.waypoint);
+  refreshWaypointLook(isl.waypoint);
+}
+
+function isWaypointOn(w) {
+  return (progress.waypoints || []).some(p => Math.abs(p.x - w.x) < 0.5 && Math.abs(p.z - w.z) < 0.5);
+}
+
+// dormant waypoints are dull grey; activated ones glow blue
+function refreshWaypointLook(w) {
+  const on = isWaypointOn(w);
+  w.crystal.material.color.set(on ? 0x8fd0f5 : 0x9aa0ab);
+  w.halo.visible = on;
+}
+
 function despawnIsland(isl) {
+  if (isl.gate) {
+    scene.remove(isl.gate.group);
+    const gi = gates.indexOf(isl.gate); if (gi >= 0) gates.splice(gi, 1);
+  }
+  if (isl.waypoint) {
+    scene.remove(isl.waypoint.group);
+    const wi = waypoints.indexOf(isl.waypoint); if (wi >= 0) waypoints.splice(wi, 1);
+  }
   scene.remove(isl.group);
   isl.group.traverse(o => {
     if (o.geometry) o.geometry.dispose();
@@ -931,7 +1015,7 @@ function clearBuilds() {
 
 function applyServerProgress(p) {
   if (!p || typeof p !== 'object') return;
-  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0 }, p);
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0, energyAt: 0, waypoints: [], riftTier: 1 }, p);
   for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
   clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name, pet.happy);
   clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
@@ -989,6 +1073,9 @@ function mergeProgress(a, b) {
     energy: Math.max(a.energy ?? 5, b.energy ?? 5),
     skins: union('skins'),
     dungeonsCleared: num('dungeonsCleared'),
+    energyAt: Math.max(a.energyAt || 0, b.energyAt || 0),
+    waypoints: longer('waypoints'),
+    riftTier: num('riftTier') || 1,
     quest: { i: Math.max((a.quest && a.quest.i) || 0, (b.quest && b.quest.i) || 0), base: null },
     // prefer a chosen cosmetic over "none"
     wardrobe: { hat: (wb.hat && wb.hat !== 'none') ? wb.hat : (wa.hat || 'none'),
@@ -1246,6 +1333,9 @@ function drawMap() {
   // skykeeper
   const [kx, ky] = toXY(skykeeper.position.x, skykeeper.position.z);
   mapCtx.fillText('✦', kx, ky);
+  // landmarks: rift gates and waypoints, so they can be spotted from a distance
+  for (const g of gates) { const [gx, gy] = toXY(g.x, g.z); mapCtx.fillText('🌀', gx, gy); }
+  for (const w of waypoints) { const [wx, wy] = toXY(w.x, w.z); mapCtx.fillText(isWaypointOn(w) ? '🔷' : '🔹', wx, wy); }
   // player arrow, pointing where Miru faces
   mapCtx.save(); mapCtx.translate(c, c); mapCtx.rotate(-body.rotation.y);
   mapCtx.fillStyle = '#ff8fb8'; mapCtx.beginPath();
@@ -1458,6 +1548,39 @@ const SHOP_SKINS = [
 
 function ownsSkin(id) { return (progress.skins || []).includes(id); }
 
+// Energy refills on its own, the way stamina/resin does in every open-world game:
+// one point per interval, tracked by timestamp so it keeps ticking while the game is
+// closed. Paying Seeds is only ever a shortcut, never the only way back up.
+const ENERGY_REGEN_MS = 6 * 60 * 1000;
+
+function tickEnergy() {
+  const now = Date.now();
+  let e = progress.energy ?? ENERGY_MAX;
+  if (e >= ENERGY_MAX) { progress.energyAt = now; return; }
+  if (!progress.energyAt) progress.energyAt = now;
+  const gained = Math.floor((now - progress.energyAt) / ENERGY_REGEN_MS);
+  if (gained > 0) {
+    const before = e;
+    e = Math.min(ENERGY_MAX, e + gained);
+    progress.energy = e;
+    progress.energyAt = e >= ENERGY_MAX ? now : progress.energyAt + gained * ENERGY_REGEN_MS;
+    if (e > before) { updateShopHud(); saveProgress(); }
+  }
+}
+
+// milliseconds until the next energy point, or 0 when full
+function energyEta() {
+  if ((progress.energy ?? ENERGY_MAX) >= ENERGY_MAX) return 0;
+  return Math.max(0, (progress.energyAt || Date.now()) + ENERGY_REGEN_MS - Date.now());
+}
+
+function etaText() {
+  const ms = energyEta();
+  if (!ms) return '';
+  const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000);
+  return m > 0 ? m + 'm ' + s + 's' : s + 's';
+}
+
 function updateShopHud() {
   const s = $('cSeed'); if (s) s.textContent = progress.seeds || 0;
   const e = $('cEnergy');
@@ -1465,6 +1588,8 @@ function updateShopHud() {
   const ss = $('shopSeeds'); if (ss) ss.textContent = progress.seeds || 0;
   const se = $('shopEnergy');
   if (se) se.textContent = (progress.energy ?? ENERGY_MAX) + '/' + ENERGY_MAX;
+  const et = $('shopEta');
+  if (et) et.textContent = energyEta() ? L('next in {t}', { t: etaText() }) : L('full');
 }
 
 function buyRefill() {
@@ -1530,6 +1655,14 @@ function renderShop() {
   }
 }
 
+// keep energy (and the shop countdown) honest while the tab is open
+tickEnergy();
+setInterval(() => {
+  tickEnergy();
+  const sh = $('shop');
+  if (sh && sh.classList.contains('on')) { updateShopHud(); }
+}, 1000);
+
 function openShop() { renderShop(); const el = $('shop'); if (el) el.classList.add('on'); }
 function closeShop() { const el = $('shop'); if (el) el.classList.remove('on'); }
 const shopBtn = $('shopBtn');
@@ -1544,9 +1677,51 @@ updateShopHud();
 // chunk streaming is frozen while inside and the player is teleported straight back out.
 const DUNGEON_X = 100000, DUNGEON_Z = 100000;
 const DUNGEON_CRYSTALS = 6;
+const RIFT_TIER_MAX = 5;
 let inDungeon = false;
 let dungeonGroup = null, dungeonIsland = null;
 let dungeonFound = 0, dungeonReturn = null, dungeonChest = null;
+let dungeonNeed = DUNGEON_CRYSTALS, dungeonTier = 1;
+let gatePrompted = null;
+
+// Deeper tiers ask for more crystals, spread them over a different shape, and pay more.
+// Ordinary difficulty tiers — the same ladder every open-world game uses.
+function riftPlan(tier) {
+  const t = Math.max(1, Math.min(RIFT_TIER_MAX, tier | 0));
+  return {
+    tier: t,
+    need: 4 + t * 2,                       // 6, 8, 10, 12, 14
+    reward: 15 + t * 10,                   // 25, 35, 45, 55, 65
+    layout: ['ring', 'spiral', 'double', 'scatter', 'tower'][t - 1],
+    radius: 13 + t
+  };
+}
+
+// Where each crystal sits, per layout. Only the floor is standable — pillars are scenery —
+// so every crystal is kept inside jump-and-reach height. Variety lives in the floor plan,
+// not in vertical platforming the collision system cannot support.
+const RIFT_Y_MIN = 1.6, RIFT_Y_MAX = 3.0;
+function riftPositions(plan) {
+  const out = [], R = plan.radius;
+  const y = f => RIFT_Y_MIN + (RIFT_Y_MAX - RIFT_Y_MIN) * f;
+  for (let i = 0; i < plan.need; i++) {
+    const f = i / plan.need, a = f * Math.PI * 2;
+    if (plan.layout === 'ring') out.push([Math.cos(a) * (R - 4), y((i % 3) / 2), Math.sin(a) * (R - 4)]);
+    else if (plan.layout === 'spiral') {
+      const rr = 3 + f * (R - 5);
+      out.push([Math.cos(a * 1.6) * rr, y(f), Math.sin(a * 1.6) * rr]);
+    } else if (plan.layout === 'double') {
+      const inner = i % 2 === 0, rr = inner ? R * 0.42 : R - 3.5;
+      out.push([Math.cos(a) * rr, y(inner ? 1 : 0), Math.sin(a) * rr]);
+    } else if (plan.layout === 'scatter') {
+      const rr = 4 + ((i * 37) % 90) / 90 * (R - 6);
+      out.push([Math.cos(a * 2.3) * rr, y(((i * 53) % 5) / 4), Math.sin(a * 2.3) * rr]);
+    } else { // 'tower': a tight helix you circle on foot
+      out.push([Math.cos(a * 2) * (R * 0.55), y((i % 4) / 3), Math.sin(a * 2) * (R * 0.55)]);
+    }
+  }
+  return out;
+}
 
 function clearDungeon() {
   if (dungeonGroup) {
@@ -1568,12 +1743,15 @@ function clearDungeon() {
   }
 }
 
-function buildDungeon() {
+function buildDungeon(plan) {
   const g = new THREE.Group();
   g.position.set(DUNGEON_X, 0, DUNGEON_Z);
-  const R = 15;
-  const floorMat = new THREE.MeshToonMaterial({ color: 0x6a5f9a });
-  const rimMat = new THREE.MeshToonMaterial({ color: 0x8f7fd0 });
+  const R = plan.radius;
+  // each tier gets its own palette so deeper runs read as a different place
+  const tone = [0x6a5f9a, 0x5f7a9a, 0x7a5f8a, 0x5f9a7a, 0x9a6f5f][plan.tier - 1];
+  const trim = [0x8f7fd0, 0x7fa8d0, 0xb07fc0, 0x7fd0a8, 0xd0a07f][plan.tier - 1];
+  const floorMat = new THREE.MeshToonMaterial({ color: tone });
+  const rimMat = new THREE.MeshToonMaterial({ color: trim });
   const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 0.9, 1.2, 32), floorMat);
   floor.position.y = -0.6; floor.receiveShadow = true; g.add(floor);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.5, 8, 40), rimMat);
@@ -1584,16 +1762,13 @@ function buildDungeon() {
   core.position.y = 3.4; g.add(core);
   core.add(new THREE.PointLight(0x9ad8ff, 1.4, 26));
   core.add(glowSprite(0x9ad8ff, 6));
-  // pillars around the ring, each holding one crystal
-  for (let i = 0; i < DUNGEON_CRYSTALS; i++) {
-    const a = i / DUNGEON_CRYSTALS * Math.PI * 2;
-    const px = Math.cos(a) * (R - 4), pz = Math.sin(a) * (R - 4);
-    const h = 2 + (i % 3);
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, h, 8), rimMat);
-    p.position.set(px, h / 2, pz); p.castShadow = true; g.add(p);
+  // a pillar under every crystal, placed by this tier's layout
+  for (const [px, py, pz] of riftPositions(plan)) {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, py, 8), rimMat);
+    p.position.set(px, py / 2, pz); p.castShadow = true; g.add(p);
     const cm = new THREE.Mesh(new THREE.OctahedronGeometry(0.45),
       new THREE.MeshBasicMaterial({ color: 0xa8f0ff }));
-    cm.position.set(DUNGEON_X + px, h + 0.9, DUNGEON_Z + pz);
+    cm.position.set(DUNGEON_X + px, py + 0.9, DUNGEON_Z + pz);
     cm.add(glowSprite(0xa8f0ff, 2.2));
     scene.add(cm);
     collect.push({ mesh: cm, kind: 'dcrystal', r: 1.3, worth: 2 });
@@ -1625,18 +1800,23 @@ function spawnDungeonChest() {
 function onDungeonCrystal() {
   dungeonFound++;
   updateDungeonHud();
-  if (dungeonFound >= DUNGEON_CRYSTALS) {
+  if (dungeonFound >= dungeonNeed) {
     spawnDungeonChest();
     chime(1400);
   } else {
-    say(L('Sky crystal {n} of {t}!', { n: dungeonFound, t: DUNGEON_CRYSTALS }));
+    say(L('Sky crystal {n} of {t}!', { n: dungeonFound, t: dungeonNeed }));
   }
 }
 
 function claimDungeonReward() {
-  const pay = 25;
+  const pay = riftPlan(dungeonTier).reward;
   progress.seeds = (progress.seeds || 0) + pay;
   progress.dungeonsCleared = (progress.dungeonsCleared || 0) + 1;
+  // clearing your deepest tier unlocks the next one, the usual ladder
+  if (dungeonTier >= (progress.riftTier || 1) && dungeonTier < RIFT_TIER_MAX) {
+    progress.riftTier = dungeonTier + 1;
+    setTimeout(() => say(L('Rift depth {n} unlocked!', { n: progress.riftTier })), 900);
+  }
   saveProgress(); updateShopHud();
   burst(player.position.clone().add(new THREE.Vector3(0, 1.5, 0)), 0xffd98a, 26);
   chime(1500);
@@ -1649,27 +1829,34 @@ function updateDungeonHud() {
   if (!box) return;
   box.classList.toggle('on', inDungeon);
   const c = $('dgCount');
-  if (c) c.textContent = dungeonFound + '/' + DUNGEON_CRYSTALS;
+  if (c) c.textContent = dungeonFound + '/' + dungeonNeed;
+  const t = $('dgTier');
+  if (t) t.textContent = L('Depth {n}', { n: dungeonTier });
 }
 
-function enterDungeon() {
+function enterDungeon(tier) {
   if (inDungeon) return;
+  tickEnergy();
   if ((progress.energy ?? ENERGY_MAX) < 1) {
-    say(L('No energy left — refill in the 🌰 shop or come back later.'));
+    say(L('No energy left — it refills on its own, or top up in the 🌰 shop.'));
     return;
   }
+  const plan = riftPlan(Math.min(tier || 1, progress.riftTier || 1));
   progress.energy = (progress.energy ?? ENERGY_MAX) - 1;
+  if (!progress.energyAt) progress.energyAt = Date.now();
   saveProgress(); updateShopHud();
+  closeGatePrompt();
   dungeonReturn = player.position.clone();
   inDungeon = true; dungeonFound = 0;
-  buildDungeon();
+  dungeonTier = plan.tier; dungeonNeed = plan.need;
+  buildDungeon(plan);
   riding = null;
-  player.position.set(DUNGEON_X, 0, DUNGEON_Z + 10);
-  spawn.set(DUNGEON_X, 0, DUNGEON_Z + 10);
+  player.position.set(DUNGEON_X, 0, DUNGEON_Z + plan.radius - 4);
+  spawn.set(DUNGEON_X, 0, DUNGEON_Z + plan.radius - 4);
   camSnap = true;
   updateDungeonHud();
   chime(720);
-  say(L('You stepped into a Sky Rift. Find {n} sky crystals!', { n: DUNGEON_CRYSTALS }));
+  say(L('You stepped into a Sky Rift. Find {n} sky crystals!', { n: plan.need }));
 }
 
 function exitDungeon(cleared) {
@@ -1686,6 +1873,93 @@ function exitDungeon(cleared) {
   if (!cleared) say(L('You slipped back out of the rift.'));
 }
 
+// ---------- gate prompt: pick a depth before spending energy ----------
+// Walking into a gate never costs anything on its own — the child confirms first, so a
+// stray step can't burn energy.
+function openGatePrompt() {
+  const el = $('gatePanel'); if (!el) return;
+  tickEnergy();
+  const box = $('gateTiers'); if (!box) return;
+  box.innerHTML = '';
+  const maxT = Math.min(RIFT_TIER_MAX, progress.riftTier || 1);
+  for (let t = 1; t <= RIFT_TIER_MAX; t++) {
+    const plan = riftPlan(t);
+    const locked = t > maxT;
+    const row = document.createElement('div');
+    row.className = 'gateRow' + (locked ? ' locked' : '');
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = L('Depth {n}', { n: t }) + ' · ' + plan.need + ' 💎';
+    const pr = document.createElement('span');
+    pr.className = 'pr';
+    pr.textContent = locked ? '🔒' : '+' + plan.reward + ' 🌰';
+    row.append(nm, pr);
+    const b = document.createElement('button');
+    b.className = 'gateGo';
+    b.textContent = locked ? L('Locked') : L('Enter');
+    if (locked) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
+    else b.addEventListener('click', () => enterDungeon(t));
+    row.appendChild(b);
+    box.appendChild(row);
+  }
+  const c = $('gateCost');
+  if (c) c.textContent = L('Costs 1 energy · you have {n}', { n: progress.energy ?? ENERGY_MAX });
+  el.classList.add('on');
+}
+function closeGatePrompt() { const el = $('gatePanel'); if (el) el.classList.remove('on'); }
+const gateCloseBtn = $('gateClose');
+if (gateCloseBtn) gateCloseBtn.addEventListener('click', closeGatePrompt);
+
+// ---------- fast travel ----------
+// Touch a waypoint once, then jump back to it from the map. Ordinary open-world travel.
+function renderTravel() {
+  const box = $('travelList'); if (!box) return;
+  box.innerHTML = '';
+  const list = progress.waypoints || [];
+  if (!list.length) {
+    const p = document.createElement('p');
+    p.className = 'travelEmpty';
+    p.textContent = L('No waypoints yet — find a glowing stone pillar out in the world and walk up to it.');
+    box.appendChild(p);
+    return;
+  }
+  for (const w of list) {
+    const b = document.createElement('button');
+    b.className = 'travelGo';
+    const d = Math.round(Math.hypot(player.position.x - w.x, player.position.z - w.z));
+    b.innerHTML = '';
+    const n = document.createElement('span'); n.className = 'nm'; n.textContent = w.name;
+    const s = document.createElement('span'); s.className = 'ds'; s.textContent = d + 'm';
+    b.append(n, s);
+    b.addEventListener('click', () => travelTo(w));
+    box.appendChild(b);
+  }
+}
+
+function travelTo(w) {
+  if (inDungeon) return;
+  // land beside the pillar, not inside it — the base is 1.5 wide and the player would
+  // otherwise arrive standing in the stone
+  player.position.set(w.x, w.y + 1, w.z + 2.5);
+  spawn.set(w.x, w.y, w.z + 2.5);
+  vel.set(0, 0, 0);
+  riding = null;
+  camSnap = true;
+  lastCX = 1e9; lastCZ = 1e9;
+  ensureChunks(w.x, w.z);
+  closeTravel();
+  chime(1080);
+  burst(new THREE.Vector3(w.x, w.y + 1.2, w.z), 0x8fd0f5, 20);
+  say(L('Travelled to {name}.', { name: w.name }));
+}
+
+function openTravel() { renderTravel(); const el = $('travel'); if (el) el.classList.add('on'); }
+function closeTravel() { const el = $('travel'); if (el) el.classList.remove('on'); }
+const travelBtn = $('travelBtn');
+if (travelBtn) travelBtn.addEventListener('click', openTravel);
+const travelCloseBtn = $('travelClose');
+if (travelCloseBtn) travelCloseBtn.addEventListener('click', closeTravel);
+
 // test hook: lets the headless suite inspect dungeon state without guessing
 window.__sky = {
   state: () => ({
@@ -1697,6 +1971,37 @@ window.__sky = {
     crystals: collect.filter(c => c.kind === 'dcrystal').length,
     ground: groundHeight(player.position.x, player.position.z)
   }),
+  // graphics triage: hide a category to find out what an on-screen artefact actually is
+  hide: what => {
+    if (what === 'clouds') clouds.forEach(c => (c.visible = false));
+    if (what === 'falls') islands.forEach(i => i.group.traverse(o => {
+      if (o.material === fallMat) o.visible = false;
+    }));
+    if (what === 'gates') gates.forEach(g => (g.group.visible = false));
+  },
+  world: () => ({
+    gates: gates.length,
+    waypoints: waypoints.length,
+    unlocked: (progress.waypoints || []).length,
+    tier: progress.riftTier || 1,
+    energy: progress.energy, energyAt: progress.energyAt, eta: energyEta()
+  }),
+  // drop the player onto the nearest gate / waypoint so travel can be tested without walking
+  // stand a normal approach away, not on top of the arch — inside the trigger, but
+  // at the distance a child actually walks up to it
+  toGate: () => {
+    if (!gates.length) return false;
+    const g = gates[0];
+    player.position.set(g.x, g.y + 0.5, g.z + 2.5); camSnap = true; return true;
+  },
+  toWaypoint: () => {
+    if (!waypoints.length) return false;
+    const w = waypoints[0];
+    player.position.set(w.x, w.y + 0.5, w.z + 2.5); camSnap = true; return true;
+  },
+  // wind the energy clock back so regeneration can be tested without waiting
+  ageEnergy: mins => { progress.energyAt = Date.now() - mins * 60000; tickEnergy(); },
+  setEnergy: n => { progress.energy = n; progress.energyAt = Date.now(); updateShopHud(); },
   // teleport onto a crystal so pickup can be tested without pathfinding
   toCrystal: () => {
     const c = collect.find(c => c.kind === 'dcrystal');
@@ -1708,7 +2013,7 @@ window.__sky = {
 };
 
 const dungeonBtn = $('dungeonBtn');
-if (dungeonBtn) dungeonBtn.addEventListener('click', () => inDungeon ? exitDungeon(false) : enterDungeon());
+if (dungeonBtn) dungeonBtn.addEventListener('click', () => inDungeon ? exitDungeon(false) : openGatePrompt());
 const dgLeave = $('dgLeave');
 if (dgLeave) dgLeave.addEventListener('click', () => exitDungeon(false));
 updateDungeonHud();
@@ -2239,6 +2544,31 @@ function animate() {
       }
     }
 
+    // touching a waypoint unlocks it for fast travel; walking into a gate offers a run
+    if (!inDungeon) {
+      // slow swirl + breathing glow so a gate reads as alive from across the island
+      for (const g of gates) {
+        g.swirl.rotation.z += dt * 0.5;
+        g.swirl.material.opacity = 0.45 + Math.sin(t * 1.8) * 0.14;
+      }
+      for (const w of waypoints) if (w.halo.visible) w.crystal.rotation.y += dt * 0.8;
+      for (const w of waypoints) {
+        if (isWaypointOn(w)) continue;
+        if (Math.hypot(player.position.x - w.x, player.position.z - w.z) < 3) {
+          progress.waypoints = [...(progress.waypoints || []), { x: w.x, y: w.y, z: w.z, name: w.name }];
+          refreshWaypointLook(w); saveProgress(); chime(1320);
+          burst(new THREE.Vector3(w.x, w.y + 3.4, w.z), 0x8fd0f5, 18);
+          say(L('Waypoint unlocked! Travel here from the map (M).'));
+        }
+      }
+      let nearGate = null;
+      for (const g of gates) {
+        if (Math.hypot(player.position.x - g.x, player.position.z - g.z) < 3) { nearGate = g; break; }
+      }
+      if (nearGate && !gatePrompted) { gatePrompted = nearGate; openGatePrompt(); }
+      else if (!nearGate && gatePrompted) { gatePrompted = null; closeGatePrompt(); }
+    }
+
     // walking into the rift chest claims the reward (once)
     if (inDungeon && dungeonChest && !dungeonChest.userData.claimed) {
       const cx = DUNGEON_X, cz = DUNGEON_Z;
@@ -2371,6 +2701,14 @@ function animate() {
     // camera collision: never sink below the island the camera hovers over
     const cgh = groundHeight(target.x, target.z);
     if (cgh > -Infinity && target.y < cgh + 0.7) target.y = cgh + 0.7;
+    else if (cgh === -Infinity) {
+      // the camera has drifted off the island edge into the void. Nothing to stand on there,
+      // so it used to sink below the rim and film the player through the island's rock body
+      // (a full-screen brown wall — caught by a fast-travel screenshot). Keep it at least as
+      // high as the ground the player is standing on.
+      const pgh = groundHeight(player.position.x, player.position.z);
+      if (pgh > -Infinity && target.y < pgh + 0.7) target.y = pgh + 0.7;
+    }
     // camera collision: pull in if a tree/decoration sits between head and camera
     const head = new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z);
     const toCam = target.clone().sub(head);

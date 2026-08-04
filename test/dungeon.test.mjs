@@ -11,7 +11,11 @@ await p.goto(process.env.TEST_URL,{waitUntil:'domcontentloaded',timeout:60000});
 await p.waitForSelector('canvas',{timeout:45000});
 await p.click('#startBtn'); await new Promise(r=>setTimeout(r,2000));
 
-await p.click('#dungeonBtn'); await new Promise(r=>setTimeout(r,1500));
+// the rift button now opens a depth picker first (standard dungeon-tier convention),
+// so entering means: open the panel, then take the shallowest unlocked depth.
+await p.click('#dungeonBtn'); await new Promise(r=>setTimeout(r,700));
+await p.evaluate(()=>document.querySelector('#gateTiers .gateGo:not(:disabled)')?.click());
+await new Promise(r=>setTimeout(r,1500));
 const s1=await p.evaluate(()=>window.__sky.state());
 const camGap=Math.hypot(s1.camera[0]-s1.player[0], s1.camera[2]-s1.player[2]);
 console.log('entered: crystals='+s1.crystals+' energy-ok camGap='+camGap.toFixed(1));
@@ -37,8 +41,17 @@ const after=await p.evaluate(()=>({
 console.log('after chest: seeds='+after.seeds+' stillInDungeon='+after.inD+' cleared='+after.saved.dungeonsCleared);
 await p.screenshot({path:OUT+'shot-after-rift.png'});
 
+// claiming the chest no longer ejects you — you stay in the cleared room and leave when
+// you choose, which is how every open-world dungeon does it. Leaving is its own action.
+await p.evaluate(()=>document.getElementById('dgLeave').click());
+await new Promise(r=>setTimeout(r,1200));
+const left=await p.evaluate(()=>{const s=window.__sky.state();
+  return {inD:s.inDungeon, gap:Math.hypot(s.camera[0]-s.player[0], s.camera[2]-s.player[2])};});
+console.log('after leaving: inDungeon='+left.inD+' camGap='+left.gap.toFixed(1));
+
 const pass = s1.crystals===6 && camGap<40 && s2.found===6 && s2.crystals===0 &&
-  after.seeds==='35' && after.inD===false && after.saved.dungeonsCleared===1;
+  after.seeds==='35' && after.inD===true && after.saved.dungeonsCleared===1 &&
+  left.inD===false && left.gap<40;
 console.log('--- errors ---'); errs.slice(0,5).forEach(e=>console.log(e));
 console.log('DUNGEON TEST:', pass?'PASS':'FAIL');
 await b.close();
