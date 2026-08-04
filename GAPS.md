@@ -66,9 +66,9 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 14. No way to dismiss/release a buddy, so a mis-befriended slime is permanent.
 15. Wardrobe has only 2 slots (hat, cape). No shoes, wings, colours, or face accessories.
 16. Miru's own colours cannot be changed — no character customisation at all.
-17. No fast travel; crossing biomes on foot gets long once the world opens up.
+17. ✅ ~~No fast travel~~ — waypoint pillars unlock on touch and the 🧭 panel teleports you back to any of them.
 18. ✅ ~~No map or compass~~ — a round minimap (bottom-right) shows islands, home 🏠, the Skykeeper ✦ and a home-compass when you wander off; M enlarges it.
-19. Great Trees are the only landmark type; the promised waterfall ring and lighthouse are missing.
+19. Partly closed — rift gates and waypoint pillars are now two more landmark types, but the promised waterfall ring and lighthouse are still missing.
 20. Weather (mist, petals, snow) was planned and never built.
 21. Only one quest chain; after 6 quests the Skykeeper has nothing new to say.
 22. No side quests from other NPCs — there are no other NPCs at all.
@@ -113,6 +113,9 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 - [x] **Decorative sprites no longer break raycasts.** The new halos were being hit by the camera and build raycasters — this spammed console errors and **broke build placement entirely**. Halos, sun and sky dome are now excluded from all raycasts. *(Caught by the regression suite, not by eye.)*
 - [x] **Sun no longer washes out the scene** *(see the sun entry above)*.
 - [x] **Teleport camera fixed.** Entering a rift left the camera easing across the whole gap — measured **7,542 units behind the player**, so the room rendered as an empty screen. The camera now snaps on teleport (re-measured: 8.5). Found by probing real state through a test hook, not by guessing.
+- [x] **Rift gate rendered as a grey sticker — FIXED.** The portal was an additive disc plus a 4.5-unit additive halo; over the pale daytime sky both saturated to white and read as a large grey slab pasted behind the arch. Now a dark indigo disc (a *hole*, not a lamp) with a small cyan swirl. Dark-on-light is what makes a gateway legible.
+- [x] **Camera filmed the player through solid rock — FIXED.** Fast travel could leave the camera off the island edge over the void, where there is no ground to clamp against, so it sank below the rim and rendered the island's underside as a full-screen brown wall. It now falls back to the player's own ground height when over the void.
+- [x] **Fast travel landed the player inside the waypoint pillar — FIXED.** You now arrive beside it.
 - [ ] Water/waterfalls are static ribbons — no flow animation.
 - [ ] No wind motion on grass or canopies (variation is static).
 - [ ] Shadows are only cast by the sun light; no ambient occlusion contact shading.
@@ -128,9 +131,10 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
 - [x] **Seeds have a source** — rarer pickups pay out (ring 1, star 2, moonpetal 5). There is no real-money path, by design.
 - [x] **Energy meter in the HUD**, spent only on entering a rift.
 - [x] **Sky Rift dungeons exist** — a room outside the streamed world with six crystals, a glowing core, and a reward chest (+25 Seeds). No enemies, no timer, no losing. Covered by `test/dungeon.test.mjs`.
-- [ ] Only one rift layout — every run is the same room. Needs procedural variety.
-- [ ] Rifts are entered from a HUD button anywhere; there is no rift *gate* object in the world to walk into.
-- [ ] Energy never regenerates over time — the only way back up is the shop. Should refill slowly on its own.
+- [x] **Five rift depths with different rooms** — depth 1–5, each with its own crystal layout (ring, spiral, double ring, scatter, helix), its own colour palette, and its own cost/reward (4→12 crystals, 15→55 Seeds). Clearing the deepest depth unlocks the next, so a child is never shown five locked doors at once. Standard tier ladder, nothing invented.
+- [x] **Rift gates exist in the world** — a purple arch with a portal you walk into, scattered through the islands, showing a depth picker when you reach it. The HUD button still works as a shortcut.
+- [x] **Waypoints + fast travel** — stone pillars you touch once to unlock (grey → glowing blue), then travel to from the 🧭 panel with the distance shown. The plain checkpoint/teleport convention every open world uses.
+- [x] **Energy refills on its own** — one point every 6 minutes, tracked by timestamp so it keeps filling while the game is closed. The shop refill is now the impatient option, not the only option. A child who runs out is never stuck waiting on a purchase.
 - [ ] Skin ownership is local only; not yet recorded as an on-chain attestation.
 - [ ] Shop purchases in game are local — the proven devnet loop is not yet wired to the buy buttons.
 - [ ] Parent-side spending limits and purchase history in the family dashboard.
