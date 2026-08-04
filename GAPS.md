@@ -75,7 +75,11 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 22. No side quests from other NPCs — there are no other NPCs at all.
 23. No cutscenes or story beats beyond dialogue boxes.
 24. Journal counts things but shows no pictures — a codex without images is dull for pre-readers.
-25. No achievements/badges surface, despite plenty of trackable milestones.
+25. ✅ ~~No achievements/badges surface~~ — **12 badges** in the Sky Journal, each with an icon, an
+    Indonesian name and a one-line "how to get it". Locked ones read *belum terbuka* in words, not
+    just a grey colour. A badge is announced the moment it is earned (message + chime + burst),
+    saved with progress, and merged across devices so it is never lost. Covered by
+    `test/badges.test.mjs`.
 26. Slimes only wander; no varied creature behaviours or personalities.
 27. Nothing to do at night specifically, despite building a day/night cycle.
 28. No seasonal events.

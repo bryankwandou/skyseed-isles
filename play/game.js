@@ -488,11 +488,70 @@ const UNLOCKS = [
 ];
 
 const SAVE_KEY = 'skyseed_save_v1';
-let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0, energyAt: 0, waypoints: [], riftTier: 1 };
+let progress = { sparks: 0, unlocked: [], biomes: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0, energyAt: 0, waypoints: [], riftTier: 1, badges: [] };
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch (e) { /* storage blocked */ }
 function saveProgress() {
+  checkBadges();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch (e) { /* storage blocked */ }
   syncServer();
+}
+
+// ---------- badges ----------
+// The plainest achievement system there is: a fixed list, each with a test against the save.
+// The game already counted every one of these things and showed the child a bare number in
+// the journal. A number is not a reward — a named badge with a moment attached is.
+const BADGES = [
+  { id: 'firstfriend', icon: '🐾', name: 'First Friend',   desc: 'Befriend your first buddy',      at: p => (p.pets || []).length >= 1 },
+  { id: 'pack',        icon: '🐾', name: 'Whole Pack',     desc: 'Befriend five buddies',          at: p => (p.pets || []).length >= 5 },
+  { id: 'wanderer',    icon: '🗺️', name: 'Wanderer',       desc: 'Discover three regions',         at: p => (p.biomes || []).length >= 3 },
+  { id: 'cartograph',  icon: '🧭', name: 'Map Maker',      desc: 'Unlock three waypoints',         at: p => (p.waypoints || []).length >= 3 },
+  { id: 'builder',     icon: '🔨', name: 'Builder',        desc: 'Place twenty decorations',       at: p => (p.builds || []).length >= 20 },
+  { id: 'gardener',    icon: '🌸', name: 'Moon Gardener',  desc: 'Find ten moonpetals',            at: p => (p.treasures || 0) >= 10 },
+  { id: 'shiny',       icon: '✨', name: 'Shiny Hunter',   desc: 'Befriend a shiny slime',         at: p => (p.shinies || 0) >= 1 },
+  { id: 'diver',       icon: '🌀', name: 'Rift Diver',     desc: 'Clear your first rift',          at: p => (p.dungeonsCleared || 0) >= 1 },
+  { id: 'deepdiver',   icon: '🌀', name: 'Deep Diver',     desc: 'Reach rift depth three',         at: p => (p.riftTier || 1) >= 3 },
+  { id: 'abyss',       icon: '👑', name: 'Abyss Walker',   desc: 'Reach the deepest rift',         at: p => (p.riftTier || 1) >= 5 },
+  { id: 'listener',    icon: '✦',  name: 'Good Listener',  desc: 'Finish every Skykeeper quest',   at: p => (p.quest ? p.quest.i : 0) >= QUESTS.length },
+  { id: 'explorer',    icon: '🪽', name: 'Sky Explorer',   desc: 'Unlock everything',              at: p => (p.unlocked || []).length >= UNLOCKS.length }
+];
+
+function checkBadges() {
+  try { awardBadges(); } catch (e) { /* start-up: BADGES or the player not built yet */ }
+}
+function awardBadges() {
+  if (!progress.badges) progress.badges = [];
+  for (const b of BADGES) {
+    if (progress.badges.includes(b.id)) continue;
+    let earned = false;
+    try { earned = b.at(progress); } catch (e) { earned = false; }
+    if (!earned) continue;
+    progress.badges.push(b.id);
+    // the moment matters more than the list — say it, sparkle it, sound it
+    say(L('Badge earned: {name}!', { name: L(b.name) }));
+    chime(1320);
+    burst(new THREE.Vector3(player.position.x, player.position.y + 2, player.position.z), 0xffe08a, 26);
+  }
+}
+
+function renderBadges() {
+  const box = $('jBadges'); if (!box) return;
+  const got = progress.badges || [];
+  box.innerHTML = '';
+  for (const b of BADGES) {
+    const on = got.includes(b.id);
+    const d = document.createElement('div');
+    d.className = 'badge' + (on ? ' on' : '');
+    // never colour-only: a locked badge says so in words for screen readers and for
+    // anyone who cannot tell the greyed one from the earned one
+    d.innerHTML = '<span class="bIco">' + (on ? b.icon : '🔒') + '</span>' +
+      '<span class="bName">' + L(b.name) + '</span>' +
+      '<span class="bDesc">' + L(b.desc) + '</span>';
+    d.setAttribute('role', 'listitem');
+    d.setAttribute('aria-label', L(b.name) + ' — ' + L(b.desc) + ' — ' + L(on ? 'earned' : 'locked'));
+    box.appendChild(d);
+  }
+  const c = $('jBadgeCount');
+  if (c) c.textContent = got.length + ' / ' + BADGES.length;
 }
 
 function nextUnlock() { return UNLOCKS.find(u => !progress.unlocked.includes(u.id)); }
@@ -1015,7 +1074,7 @@ function clearBuilds() {
 
 function applyServerProgress(p) {
   if (!p || typeof p !== 'object') return;
-  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0, energyAt: 0, waypoints: [], riftTier: 1 }, p);
+  progress = Object.assign({ sparks: 0, unlocked: [], biomes: [], pets: [], builds: [], treasures: 0, shinies: 0, bops: 0, wonders: [], quest: { i: 0, base: null }, wardrobe: { hat: 'none', cape: 'none', outfit: 'dress' }, berries: 0, seeds: 0, energy: 5, skins: [], dungeonsCleared: 0, energyAt: 0, waypoints: [], riftTier: 1, badges: [] }, p);
   for (const u of UNLOCKS) if (progress.unlocked.includes(u.id)) applyUnlock(u, false);
   clearPets(); if (Array.isArray(progress.pets)) for (const pet of progress.pets) makePet(pet.color, pet.level, pet.name, pet.happy);
   clearBuilds(); if (Array.isArray(progress.builds)) for (const b of progress.builds) spawnBuild(b);
@@ -1076,6 +1135,8 @@ function mergeProgress(a, b) {
     energyAt: Math.max(a.energyAt || 0, b.energyAt || 0),
     waypoints: longer('waypoints'),
     riftTier: num('riftTier') || 1,
+    // a badge earned on either device is earned, full stop — never take one back
+    badges: union('badges'),
     quest: { i: Math.max((a.quest && a.quest.i) || 0, (b.quest && b.quest.i) || 0), base: null },
     // prefer a chosen cosmetic over "none"
     wardrobe: { hat: (wb.hat && wb.hat !== 'none') ? wb.hat : (wa.hat || 'none'),
@@ -1119,6 +1180,7 @@ function openJournal() {
   $('jBuilds').textContent = (progress.builds || []).length;
   $('jQuests').textContent = Math.min(progress.quest.i, QUESTS.length) + ' / ' + QUESTS.length;
   const jr = $('jRifts'); if (jr) jr.textContent = progress.dungeonsCleared || 0;
+  checkBadges(); renderBadges();
   el.classList.add('on');
 }
 function closeJournal() { const el = $('journal'); if (el) el.classList.remove('on'); }
