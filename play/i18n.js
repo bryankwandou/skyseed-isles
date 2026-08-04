@@ -262,6 +262,19 @@ export const STRINGS = {
     'Confirm password': 'Ulangi kata sandi',
     '3–20 letters, numbers or underscores.': '3–20 huruf, angka, atau garis bawah.',
     'At least 8 characters.': 'Minimal 8 karakter.',
+    'Email — only if you have one': 'Email — kalau punya saja',
+    'Leave this empty if you do not have an email. You can still play.':
+      'Kosongkan saja kalau kamu belum punya email. Kamu tetap bisa main.',
+    'At least 8 characters. Tap Show to check what you typed.':
+      'Minimal 8 karakter. Tekan Lihat untuk mengecek ketikanmu.',
+    'Show': 'Lihat',
+    'Hide': 'Tutup',
+    'Show password': 'Lihat kata sandi',
+    'Hide password': 'Sembunyikan kata sandi',
+    'Pick a name with 3–20 letters, numbers or _ (no spaces).':
+      'Pakai nama 3–20 huruf, angka atau _ (tanpa spasi).',
+    'Your password needs at least 8 characters.':
+      'Kata sandimu harus minimal 8 karakter.',
     'Create account': 'Buat akun',
     'or': 'atau',
     'Continue with Google': 'Lanjut dengan Google',

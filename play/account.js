@@ -26,6 +26,24 @@ $('tabRegister').addEventListener('click', () => showTab('register'));
 // deep link: account.html#signup opens the register tab
 if (location.hash === '#signup') showTab('register');
 
+// Show/hide a password. A child who cannot see what they typed gets stuck on their own
+// typo, and there is no adult beside them to fix it.
+function wirePeek(btnId, inputId) {
+  const btn = $(btnId), input = $(inputId);
+  if (!btn || !input) return;
+  btn.addEventListener('click', () => {
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.setAttribute('aria-pressed', String(!showing));
+    btn.setAttribute('aria-label', L(showing ? 'Show password' : 'Hide password'));
+    const span = btn.querySelector('span');
+    if (span) span.textContent = L(showing ? 'Show' : 'Hide');
+    input.focus();
+  });
+}
+wirePeek('li_peek', 'li_pass');
+wirePeek('rg_peek', 'rg_pass');
+
 function setMsg(el, text, kind) {
   el.textContent = text || '';
   el.className = 'msg' + (kind ? ' ' + kind : '');
@@ -69,15 +87,24 @@ $('loginForm').addEventListener('submit', async e => {
 $('registerForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('.primary');
+  const pass = $('rg_pass').value;
   const payload = {
     username: $('rg_user').value.trim(),
-    email: $('rg_email').value.trim(),
-    password: $('rg_pass').value,
-    confirm: $('rg_confirm').value,
+    email: $('rg_email').value.trim(),   // may be empty — the server mints a placeholder
+    password: pass,
+    confirm: pass,                       // one field now, so it always agrees with itself
     acceptedTerms: $('rg_terms').checked,
     acceptedPrivacy: $('rg_privacy').checked
   };
-  if (payload.password !== payload.confirm) { setMsg($('rg_msg'), L('The two passwords do not match.'), 'err'); return; }
+  // say what is wrong in the order the child filled the form in, not all at once
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(payload.username)) {
+    setMsg($('rg_msg'), L('Pick a name with 3–20 letters, numbers or _ (no spaces).'), 'err');
+    $('rg_user').focus(); return;
+  }
+  if (pass.length < 8) {
+    setMsg($('rg_msg'), L('Your password needs at least 8 characters.'), 'err');
+    $('rg_pass').focus(); return;
+  }
   if (!payload.acceptedTerms || !payload.acceptedPrivacy) { setMsg($('rg_msg'), L('Please accept the Terms and Privacy agreement.'), 'err'); return; }
   btn.disabled = true; setMsg($('rg_msg'), L('Creating your account…'));
   const { ok, data } = await post('/api/register', payload);
