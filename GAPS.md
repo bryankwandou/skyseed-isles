@@ -44,10 +44,11 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 6. ✅ **~~No tests in the repository~~ — FIXED.**
    Four end-to-end suites now live in `test/`, each documented with the real bug it caught, plus a
    GitHub Actions workflow that syntax-checks everything and fails the build if a secret is committed.
-7. 🔴 **Still open — you must create the 12 child accounts.** The database holds one account.
-   Use the family dashboard → "Add a child". Nothing is handed to any child until you do.
-8. 🔴 **Still open — the Neon database password has not been rotated.** It was pasted into a chat.
-   Only you can do this: Neon Console → Reset password → update `DATABASE_URL` in Vercel.
+7. ✅ **~~You must create the 12 child accounts~~ — deliberately not doing this.** The parent chose
+   to let the children create their own accounts when they get home from school, rather than hand
+   them pre-made ones. So the work moved to the sign-up screen instead: see #40. The family
+   dashboard "Add a child" route still exists as a fallback for any child who gets stuck.
+8. ✅ **~~The Neon database password has not been rotated~~ — rotated by the parent.**
 9. ✅ **~~Two devices can overwrite each other~~ — FIXED & VERIFIED.**
    Replaced the whole-save "winner" with a **per-field merge**: sparks/treasures/bops take the max,
    unlocked/biomes/wonders take the union, pets/builds keep the richer list, a chosen cosmetic beats
@@ -92,8 +93,13 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 37. No data export ("give me my child's data") despite promising a right to delete.
 38. ✅ ~~Terms/Privacy live in alert() popups~~ — real, readable, bilingual pages (terms.html, privacy.html).
 39. No age gate or parent-consent step at sign-up.
-40. Children type their own email at sign-up; for a family flow the parent should create accounts
-    and children should never enter an email.
+40. ✅ ~~Children must type an email at sign-up~~ — **email is now optional.** A child who does not
+    have one leaves it blank and the server mints the same `@child.skyseed.local` placeholder the
+    family dashboard uses. The password field is single (no hidden confirm) with a Show/Hide
+    button, and errors arrive one at a time with focus moved to the field that needs fixing.
+    Covered by `test/signup.test.mjs`, driven at a 420 px phone width.
+    *Honest consequence:* a blank email means no email password recovery — the parent resets it,
+    which was already the only recovery path.
 41. No CSP or security headers (`X-Frame-Options`, `Referrer-Policy`, etc.).
 42. Session cookies never rotate and cannot be revoked server-side (no logout-everywhere).
 43. Password rules are minimal (8 chars, nothing else) and there is no strength meter.
@@ -206,14 +212,16 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
 - **Closed this pass:** 6 of the 7 critical items (guest data loss, Indonesian, parent-created child
   accounts, parent recovery, rate limiting, tests + CI). Also #40 (children no longer type an email)
   and #44 (login backoff).
-- **Still open:** ~84 items, of which **2 need you rather than me**: create the 12 child accounts,
-  and rotate the Neon password.
+- **Closed since:** fast travel + waypoints, rift gates in the world, five dungeon depths, energy
+  regeneration, two graphics artefacts, and self-service child sign-up.
+- **Still open:** ~78 items, **none of which need you rather than me.** Nothing blocks handing the
+  game to a child this afternoon.
 
 ## Suggested order of work
 
-**Needs you (5 minutes):**
-1. Family dashboard → "Add a child" × 12.
-2. Neon Console → reset the database password → update `DATABASE_URL` in Vercel.
+**Needs you: nothing is blocking any more.** The database password is rotated, and the twelve
+accounts are deliberately left for the children to create themselves — which is why the sign-up
+screen was rebuilt around a child working alone (#40).
 
 **Next up for me, highest value first:**
 1. ~~Translate account, dashboard and landing pages.~~ ✅ Done — whole site is Indonesian.
