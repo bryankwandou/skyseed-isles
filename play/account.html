@@ -37,7 +37,7 @@
     outline:none; border-color:var(--brand);
     box-shadow:0 0 0 3px rgba(160,107,240,.22);
   }
-  .check { display:flex; gap:9px; align-items:flex-start; font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .check { display:flex; gap:9px; align-items:flex-start; font-size:13px; color:var(--ink); line-height:1.5; }
   .check input { margin-top:2px; width:17px; height:17px; flex:0 0 auto; accent-color:var(--brand); }
   .check a { color:var(--brand); font-weight:600; }
   .primary {
@@ -61,7 +61,19 @@
   .msg.ok { color:#2f9e6f; }
   .foot { text-align:center; margin-top:16px; font-size:13px; }
   .foot a { color:var(--brand); font-weight:600; text-decoration:none; }
-  .hint { font-size:11.5px; color:#9aa8ba; margin-top:3px; }
+  /* These hints tell a child what to do, so they must be readable, not decorative.
+     The old #9aa8ba was about 2.5:1 on white — below AA. #5b6b82 is 5.9:1. */
+  .hint { font-size:12.5px; color:var(--muted); margin-top:4px; line-height:1.45; }
+  /* password field + its Show button */
+  .pwrap { position:relative; display:flex; }
+  .pwrap input { padding-right:74px; }
+  .peek {
+    position:absolute; right:5px; top:50%; transform:translateY(-50%);
+    min-width:64px; min-height:40px; padding:0 10px; border:none; border-radius:9px;
+    background:#eef4fb; color:var(--muted); font-weight:700; font-size:12.5px; cursor:pointer;
+  }
+  .peek[aria-pressed="true"] { background:var(--brand); color:#fff; }
+  .peek:focus-visible { outline:3px solid var(--brand); outline-offset:2px; }
 </style>
 </head>
 <body>
@@ -84,7 +96,11 @@
     </div>
     <div>
       <label for="li_pass" data-i18n="Password">Password</label>
-      <input id="li_pass" name="password" type="password" autocomplete="current-password" required />
+      <div class="pwrap">
+        <input id="li_pass" name="password" type="password" autocomplete="current-password" required />
+        <button type="button" class="peek" id="li_peek" aria-controls="li_pass" aria-pressed="false"
+                aria-label="Show password"><span data-i18n="Show">Show</span></button>
+      </div>
     </div>
     <button class="primary" type="submit" data-i18n="Log in">Log in</button>
     <div class="divider" data-i18n="or">or</div>
@@ -104,17 +120,20 @@
       <div class="hint" data-i18n="3–20 letters, numbers or underscores.">3–20 letters, numbers or underscores.</div>
     </div>
     <div>
-      <label for="rg_email" data-i18n="Email">Email</label>
-      <input id="rg_email" name="email" type="email" autocomplete="email" required />
+      <label for="rg_email" data-i18n="Email — only if you have one">Email — only if you have one</label>
+      <input id="rg_email" name="email" type="email" autocomplete="email" />
+      <div class="hint" data-i18n="Leave this empty if you do not have an email. You can still play.">Leave this empty if you do not have an email. You can still play.</div>
     </div>
     <div>
       <label for="rg_pass" data-i18n="Password">Password</label>
-      <input id="rg_pass" name="password" type="password" autocomplete="new-password" required minlength="8" />
-      <div class="hint" data-i18n="At least 8 characters.">At least 8 characters.</div>
-    </div>
-    <div>
-      <label for="rg_confirm" data-i18n="Confirm password">Confirm password</label>
-      <input id="rg_confirm" name="confirm" type="password" autocomplete="new-password" required minlength="8" />
+      <!-- A child mistyping a hidden password twice was the most likely way to get stuck,
+           so there is one field and a Show button instead of a confirm field. -->
+      <div class="pwrap">
+        <input id="rg_pass" name="password" type="password" autocomplete="new-password" required minlength="8" />
+        <button type="button" class="peek" id="rg_peek" aria-controls="rg_pass" aria-pressed="false"
+                data-i18n-aria="Show password" aria-label="Show password"><span data-i18n="Show">Show</span></button>
+      </div>
+      <div class="hint" data-i18n="At least 8 characters. Tap Show to check what you typed.">At least 8 characters. Tap Show to check what you typed.</div>
     </div>
     <label class="check">
       <input id="rg_terms" type="checkbox" required />
