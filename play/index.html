@@ -104,7 +104,7 @@
     color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; user-select:none;
   }
-  #buddyBtn, #photoBtn, #shopBtn, #dungeonBtn {
+  #buddyBtn, #photoBtn, #shopBtn, #dungeonBtn, #travelBtn {
     position:fixed; z-index:22; left:12px; width:44px; height:44px;
     border-radius:12px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
     color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
@@ -114,6 +114,45 @@
   #photoBtn { top:326px; }
   #shopBtn { top:380px; }
   #dungeonBtn { top:434px; }
+  #travelBtn { top:488px; }
+  /* gate + fast-travel panels share the modal look of the other dialogs */
+  #gatePanel, #travel {
+    position:fixed; inset:0; z-index:59; display:none; align-items:center; justify-content:center;
+    background:rgba(20,35,60,.45); backdrop-filter:blur(4px);
+  }
+  #gatePanel.on, #travel.on { display:flex; }
+  #gateCard, #travelCard {
+    width:min(94vw,430px); max-height:86vh; overflow:auto; background:#fffdf5;
+    border-radius:20px; padding:22px; color:var(--ink); box-shadow:0 18px 50px rgba(20,40,80,.35);
+  }
+  #gateCard h2, #travelCard h2 { font-size:20px; color:#1d3a5f; margin-bottom:4px; text-align:center; }
+  #gateCard p.sub, #travelCard p.sub { font-size:13px; color:#5b6b82; text-align:center; margin-bottom:12px; }
+  .gateRow {
+    display:flex; align-items:center; gap:10px; padding:9px 10px; margin-bottom:7px;
+    background:#f2f6fc; border-radius:12px;
+  }
+  .gateRow .nm { flex:1 1 auto; font-size:14px; font-weight:600; }
+  .gateRow .pr { font-size:13px; color:#5b6b82; font-variant-numeric:tabular-nums; }
+  .gateRow.locked { opacity:.55; }
+  .gateGo, .travelGo {
+    border:none; cursor:pointer; color:#fff; font-weight:700; font-size:13px;
+    padding:9px 14px; border-radius:10px; min-height:40px;
+    background:linear-gradient(135deg,#8fd0f5,#a06bf0);
+  }
+  .gateGo:disabled { background:#d6dde6; color:#8a94a3; cursor:default; }
+  .gateGo:focus-visible, .travelGo:focus-visible { outline:3px solid #1d3a5f; outline-offset:2px; }
+  .travelGo {
+    display:flex; width:100%; align-items:center; justify-content:space-between; gap:10px;
+    margin-bottom:7px; text-align:left; color:#1d3a5f;
+    background:#eef4fd; font-size:14px;
+  }
+  .travelGo .ds { font-size:12px; color:#5b6b82; font-variant-numeric:tabular-nums; }
+  .travelEmpty { text-align:center; color:#7a879a; font-size:13.5px; padding:20px 6px; line-height:1.6; }
+  #gateCost { text-align:center; font-size:12.5px; color:#5b6b82; margin-top:10px; }
+  #gateClose, #travelClose {
+    width:100%; margin-top:12px; border:none; cursor:pointer; color:#fff; font-weight:700; font-size:15px;
+    padding:11px; border-radius:12px; background:linear-gradient(135deg,#8fd0f5,#a06bf0);
+  }
   /* dungeon run banner */
   #dungeonHud {
     position:fixed; z-index:16; top:12px; left:50%; transform:translateX(-50%);
@@ -169,7 +208,7 @@
   /* photo mode */
   body.photo #hud, body.photo #accountBar, body.photo #help, body.photo #buildBtn,
   body.photo #careBtn, body.photo #rideBtn, body.photo #pauseBtn, body.photo #journalBtn,
-  body.photo #wardrobeBtn, body.photo #buddyBtn, body.photo #photoBtn, body.photo #shopBtn, body.photo #dungeonBtn, body.photo #dungeonHud, body.photo #mapWrap,
+  body.photo #wardrobeBtn, body.photo #buddyBtn, body.photo #photoBtn, body.photo #shopBtn, body.photo #dungeonBtn, body.photo #travelBtn, body.photo #dungeonHud, body.photo #mapWrap,
   body.photo #talkBtn, body.photo #palette, body.photo #stick, body.photo .tbtn { display:none !important; }
   #photoBar { position:fixed; z-index:40; left:50%; bottom:24px; transform:translateX(-50%); display:none; gap:10px; }
   body.photo #photoBar { display:flex; }
@@ -376,9 +415,28 @@
 <button id="photoBtn" aria-label="Photo mode" data-i18n-aria="Photo">📷</button>
 <button id="shopBtn" aria-label="Seed Shop" data-i18n-aria="Seed Shop">🌰</button>
 <button id="dungeonBtn" aria-label="Sky Rift" data-i18n-aria="Sky Rift">🌀</button>
+<button id="travelBtn" aria-label="Fast travel" data-i18n-aria="Fast travel">🧭</button>
 <div id="dungeonHud">
+  <span id="dgTier"></span>
   <span><span data-i18n="Sky crystals">Sky crystals</span> <b id="dgCount">0/6</b></span>
   <button id="dgLeave" data-i18n="Leave rift">Leave rift</button>
+</div>
+<div id="gatePanel" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+  <div id="gateCard">
+    <h2 id="gateTitle" data-i18n="Sky Rift">Sky Rift</h2>
+    <p class="sub" data-i18n="GATE_SUB">Pick how deep to go. Deeper rifts hold more crystals and pay more Seeds.</p>
+    <div id="gateTiers"></div>
+    <p id="gateCost"></p>
+    <button id="gateClose" data-i18n="Not now">Not now</button>
+  </div>
+</div>
+<div id="travel" role="dialog" aria-modal="true" aria-labelledby="travelTitle">
+  <div id="travelCard">
+    <h2 id="travelTitle" data-i18n="Fast travel">Fast travel</h2>
+    <p class="sub" data-i18n="TRAVEL_SUB">Waypoints you have touched. Tap one to go straight there.</p>
+    <div id="travelList"></div>
+    <button id="travelClose" data-i18n="Close">Close</button>
+  </div>
 </div>
 <div id="mapWrap" aria-hidden="true"><canvas id="map" width="132" height="132"></canvas></div>
 <div id="photoBar">
@@ -408,7 +466,7 @@
     <p class="sub" data-i18n="SHOP_SUB">Seeds come from playing. The whole world stays free — Seeds only buy looks and dungeon trips.</p>
     <div id="shopWallet">
       <span><span data-i18n="Seeds">Seeds</span> <b id="shopSeeds">0</b></span>
-      <span><span data-i18n="Energy">Energy</span> <b id="shopEnergy">5/5</b></span>
+      <span><span data-i18n="Energy">Energy</span> <b id="shopEnergy">5/5</b> <small id="shopEta"></small></span>
     </div>
     <h3 data-i18n="Dungeon energy">Dungeon energy</h3>
     <div id="shopEnergyBox"></div>
