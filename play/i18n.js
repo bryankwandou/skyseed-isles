@@ -263,6 +263,48 @@ export const STRINGS = {
     '3–20 letters, numbers or underscores.': '3–20 huruf, angka, atau garis bawah.',
     'At least 8 characters.': 'Minimal 8 karakter.',
     'Badges': 'Lencana',
+    'The isles crack open sometimes — a rift. Step into one and clear what waits inside.':
+      'Kadang pulau ini retak — namanya celah. Masuklah ke salah satunya dan tuntaskan isinya.',
+    'You came back from a rift! Not everyone does that on the first try.':
+      'Kamu kembali dari celah! Tidak semua orang berhasil di percobaan pertama.',
+    '{n}/1 rift': '{n}/1 celah',
+    'Standing stones remember you. Wake 3 of them so you never have to walk the long way again.':
+      'Batu penanda bisa mengingatmu. Bangunkan 3 di antaranya supaya kamu tak perlu berjalan jauh lagi.',
+    'Three stones humming. The sky is smaller for you now.':
+      'Tiga batu bersenandung. Langit terasa lebih dekat sekarang.',
+    '{n}/3 waypoints': '{n}/3 titik singgah',
+    'A buddy who eats well grows strong. Feed your slimes 5 berries.':
+      'Teman yang makannya cukup akan tumbuh kuat. Beri slime-mu 5 buah beri.',
+    'Look how bright they are! You are a good friend.':
+      'Lihat betapa cerahnya mereka! Kamu teman yang baik.',
+    '{n}/5 berries': '{n}/5 beri',
+    'Gather 5 buddies around you — a whole little troop.':
+      'Kumpulkan 5 teman di sekitarmu — satu regu kecil.',
+    'A troop of your own! They follow you everywhere now.':
+      'Regu milikmu sendiri! Sekarang mereka ikut ke mana pun kamu pergi.',
+    '{n}/5 buddies': '{n}/5 teman',
+    'Go deeper. There is a rift down at depth three, and it is not gentle.':
+      'Turun lebih dalam. Ada celah di kedalaman tiga, dan itu tidak ramah.',
+    'Depth three, and you walked out. The old gardeners would be proud.':
+      'Kedalaman tiga, dan kamu keluar dengan selamat. Para tukang kebun lama pasti bangga.',
+    '{n}/3 depth': '{n}/3 kedalaman',
+    'Last one, truly. Find 10 moonpetals and the isles will remember your name forever.':
+      'Yang terakhir, sungguh. Temukan 10 kelopak bulan dan pulau ini akan mengingat namamu selamanya.',
+    'Ten moonpetals. You are a Sky Explorer, and this garden is yours. Thank you, little gardener.':
+      'Sepuluh kelopak bulan. Kamu Penjelajah Langit, dan kebun ini milikmu. Terima kasih, tukang kebun kecil.',
+    '{n}/10 moonpetals': '{n}/10 kelopak bulan',
+    'worn': 'sedang dipakai',
+    'not worn': 'belum dipakai',
+    'Send home': 'Pulangkan',
+    'Send {name} home? You can befriend another slime any time.': 'Pulangkan {name}? Kamu bisa berteman dengan slime lain kapan saja.',
+    '{name} went home happy. 👋': '{name} pulang dengan senang. 👋',
+    'Family': 'Keluarga',
+    'Family goal': 'Target keluarga',
+    'Every spark any of you collects counts towards this.': 'Setiap kilau yang kalian kumpulkan dihitung di sini.',
+    'Looking for the others…': 'Mencari yang lain…',
+    'Cannot see the others right now. Sign in and reconnect to the internet.': 'Belum bisa melihat yang lain. Masuk dulu dan sambungkan internet.',
+    'Nobody else has started playing yet.': 'Belum ada yang mulai bermain.',
+    'you': 'kamu',
     'Badge earned: {name}!': 'Dapat lencana: {name}!',
     'earned': 'sudah didapat',
     'locked': 'belum terbuka',

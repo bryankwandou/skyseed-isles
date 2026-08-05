@@ -11,6 +11,14 @@
     "test:browser": "node test/browser.test.mjs",
     "test:i18n": "node test/i18n.test.mjs",
     "test:vrm": "node test/vrm.test.mjs miru.vrm",
+    "test:world": "node test/world.test.mjs",
+    "test:dungeon": "node test/dungeon.test.mjs",
+    "test:shop": "node test/shop.test.mjs",
+    "test:badges": "node test/badges.test.mjs",
+    "test:family": "node test/family.test.mjs",
+    "test:signup": "node test/signup.test.mjs",
+    "test:quests": "node test/quests.test.mjs",
+    "test:portrait": "node test/portrait.test.mjs",
     "check": "node --input-type=module --check < play/game.js && node --input-type=module --check < play/i18n.js && node --check play/account.js && node --check play/sw.js"
   },
   "dependencies": {
