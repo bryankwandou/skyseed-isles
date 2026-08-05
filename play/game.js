@@ -554,6 +554,67 @@ function renderBadges() {
   if (c) c.textContent = got.length + ' / ' + BADGES.length;
 }
 
+// The family board. Twelve children play the same game on twelve phones and until now had no
+// idea the others existed. This shows who is playing and one goal they add up to together —
+// the shared bar is deliberately first, so the ranking below reads as "we did this", not "I lost".
+let familyBusy = false;
+function setFamilyNote(msg) {
+  const box = $('jFamily'); if (!box) return;
+  box.innerHTML = '';
+  const p = document.createElement('p');
+  p.className = 'jNote'; p.style.cssText = 'font-size:12.5px;color:#6b5f4d;padding:8px 4px;line-height:1.4;';
+  p.textContent = msg;
+  box.appendChild(p);
+}
+async function loadFamily() {
+  const box = $('jFamily'); if (!box || familyBusy) return;
+  familyBusy = true;
+  setFamilyNote(L('Looking for the others…'));
+  try {
+    const r = await fetch('/api/board', { credentials: 'include' });
+    if (!r.ok) throw new Error('board ' + r.status);
+    renderFamily(await r.json());
+  } catch (e) {
+    // offline or playing as a guest — say which, plainly, instead of showing an empty box
+    setFamilyNote(L('Cannot see the others right now. Sign in and reconnect to the internet.'));
+    const bar = $('jGoalFill'); if (bar) bar.style.width = '0%';
+    const num = $('jGoalNum'); if (num) num.textContent = '';
+  } finally { familyBusy = false; }
+}
+function renderFamily(d) {
+  const box = $('jFamily'); if (!box) return;
+  const goal = d.goal || 1, total = d.total || 0;
+  const pct = Math.min(100, Math.round((total / goal) * 100));
+  const fill = $('jGoalFill'); if (fill) fill.style.width = pct + '%';
+  const num = $('jGoalNum');
+  if (num) num.textContent = total.toLocaleString() + ' / ' + goal.toLocaleString() + ' ✦';
+  const bar = $('jGoalBar');
+  if (bar) {
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', String(goal));
+    bar.setAttribute('aria-valuenow', String(total));
+    bar.setAttribute('aria-label', L('Family goal') + ' — ' + pct + '%');
+  }
+  box.innerHTML = '';
+  const players = d.players || [];
+  if (!players.length) { setFamilyNote(L('Nobody else has started playing yet.')); return; }
+  players.forEach((p, i) => {
+    const mine = p.username === d.me;
+    const row = document.createElement('div');
+    row.className = 'fRow' + (mine ? ' me' : '');
+    row.setAttribute('role', 'listitem');
+    const pos = document.createElement('span'); pos.className = 'fPos'; pos.textContent = (i + 1) + '.';
+    const nm = document.createElement('span'); nm.className = 'fName'; nm.textContent = p.username;
+    const b = document.createElement('b'); b.textContent = (p.sparks || 0).toLocaleString() + ' ✦';
+    row.append(pos, nm);
+    if (mine) { const me = document.createElement('span'); me.className = 'fMe'; me.textContent = L('you'); row.appendChild(me); }
+    row.appendChild(b);
+    row.setAttribute('aria-label', (i + 1) + '. ' + p.username + (mine ? ' (' + L('you') + ')' : '') +
+      ' — ' + (p.sparks || 0) + ' ' + L('Sparks'));
+    box.appendChild(row);
+  });
+}
+
 function nextUnlock() { return UNLOCKS.find(u => !progress.unlocked.includes(u.id)); }
 function refreshGoal() {
   const nu = nextUnlock();
@@ -1126,7 +1187,7 @@ function mergeProgress(a, b) {
     pets: pets.slice(),
     builds: longer('builds'),
     treasures: num('treasures'), shinies: num('shinies'), bops: num('bops'),
-    berries: num('berries'),
+    berries: num('berries'), fed: num('fed'),
     // shop economy: keep the larger purse, the fuller energy, and every skin ever bought
     seeds: num('seeds'),
     energy: Math.max(a.energy ?? 5, b.energy ?? 5),
@@ -1182,6 +1243,7 @@ function openJournal() {
   const jr = $('jRifts'); if (jr) jr.textContent = progress.dungeonsCleared || 0;
   checkBadges(); renderBadges();
   el.classList.add('on');
+  loadFamily();
 }
 function closeJournal() { const el = $('journal'); if (el) el.classList.remove('on'); }
 const journalBtn = $('journalBtn');
@@ -1210,7 +1272,10 @@ function qSnapshot() {
   return {
     sparks: progress.sparks, pets: pets.length, bops: progress.bops || 0,
     builds: (progress.builds || []).length, biomes: progress.biomes.length,
-    treasures: progress.treasures || 0
+    treasures: progress.treasures || 0,
+    rifts: progress.dungeonsCleared || 0,
+    waypoints: (progress.waypoints || []).length,
+    fed: progress.fed || 0
   };
 }
 const QUESTS = [
@@ -1238,6 +1303,32 @@ const QUESTS = [
     done: 'A moonpetal! You did it — you are a true Sky Explorer! Come back any time, little gardener.', reward: 25,
     prog: b => L('{n}/1 moonpetal', { n: Math.min(1, (progress.treasures || 0) - b.treasures) }),
     ok: b => (progress.treasures || 0) - b.treasures >= 1 },
+  // Six was a day's work for a fast child, and then the Skykeeper had nothing left to say.
+  // These six lean on the parts of the world that came later: rifts, waypoints, buddies.
+  { give: 'The isles crack open sometimes — a rift. Step into one and clear what waits inside.',
+    done: 'You came back from a rift! Not everyone does that on the first try.', reward: 20,
+    prog: b => L('{n}/1 rift', { n: Math.min(1, (progress.dungeonsCleared || 0) - (b.rifts || 0)) }),
+    ok: b => (progress.dungeonsCleared || 0) - (b.rifts || 0) >= 1 },
+  { give: 'Standing stones remember you. Wake 3 of them so you never have to walk the long way again.',
+    done: 'Three stones humming. The sky is smaller for you now.', reward: 20,
+    prog: b => L('{n}/3 waypoints', { n: Math.min(3, (progress.waypoints || []).length - (b.waypoints || 0)) }),
+    ok: b => (progress.waypoints || []).length - (b.waypoints || 0) >= 3 },
+  { give: 'A buddy who eats well grows strong. Feed your slimes 5 berries.',
+    done: 'Look how bright they are! You are a good friend.', reward: 20,
+    prog: b => L('{n}/5 berries', { n: Math.min(5, (progress.fed || 0) - (b.fed || 0)) }),
+    ok: b => (progress.fed || 0) - (b.fed || 0) >= 5 },
+  { give: 'Gather 5 buddies around you — a whole little troop.',
+    done: 'A troop of your own! They follow you everywhere now.', reward: 25,
+    prog: b => L('{n}/5 buddies', { n: Math.min(5, pets.length) }),
+    ok: () => pets.length >= 5 },
+  { give: 'Go deeper. There is a rift down at depth three, and it is not gentle.',
+    done: 'Depth three, and you walked out. The old gardeners would be proud.', reward: 30,
+    prog: b => L('{n}/3 depth', { n: Math.min(3, progress.riftTier || 1) }),
+    ok: () => (progress.riftTier || 1) >= 3 },
+  { give: 'Last one, truly. Find 10 moonpetals and the isles will remember your name forever.',
+    done: 'Ten moonpetals. You are a Sky Explorer, and this garden is yours. Thank you, little gardener.', reward: 50,
+    prog: () => L('{n}/10 moonpetals', { n: Math.min(10, progress.treasures || 0) }),
+    ok: () => (progress.treasures || 0) >= 10 },
 ];
 
 function showDialog(text) {
@@ -1313,6 +1404,7 @@ if (careBtn) careBtn.addEventListener('click', careForBuddy);
 function feedBuddy(pet) {
   if ((progress.berries || 0) <= 0) { say(L('No berries yet — collect seeds to find some!')); chime(300); return; }
   progress.berries--;
+  progress.fed = (progress.fed || 0) + 1; // the Skykeeper asks for this later on
   pet.happy = Math.min(100, (pet.happy || 60) + 22);
   pet.careBounce = 1;
   heartBurst(pet.g.position); chime(1120);
@@ -1329,6 +1421,24 @@ function renameBuddy(pet) {
   pet.name = nm;
   savePets(); updateBuddyHud(); renderBuddyPanel();
   heartBurst(pet.g.position); chime(1240);
+}
+
+// A slime befriended by accident used to be permanent. This is the way out — framed as
+// sending it home rather than deleting it, and it asks first, because a child will tap it
+// by mistake at least once.
+function releaseBuddy(pet) {
+  if (!confirm(L('Send {name} home? You can befriend another slime any time.', { name: pet.name }))) return;
+  const i = pets.indexOf(pet); if (i < 0) return;
+  pets.splice(i, 1);
+  heartBurst(pet.g.position);
+  scene.remove(pet.g);
+  pet.g.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material && !o.material.userData.shared) o.material.dispose();
+  });
+  chime(660);
+  say(L('{name} went home happy. 👋', { name: pet.name }));
+  savePets(); updateBuddyHud(); renderBuddyPanel();
 }
 
 function moodFor(h) {
@@ -1352,7 +1462,10 @@ function renderBuddyPanel() {
     rn.addEventListener('click', () => renameBuddy(p));
     const fd = document.createElement('button'); fd.className = 'bdBtn feed'; fd.textContent = L('Feed') + ' 🍓';
     fd.addEventListener('click', () => feedBuddy(p));
-    row.appendChild(rn); row.appendChild(fd);
+    const go = document.createElement('button'); go.className = 'bdBtn go'; go.textContent = L('Send home');
+    go.setAttribute('aria-label', L('Send home') + ' — ' + p.name);
+    go.addEventListener('click', () => releaseBuddy(p));
+    row.appendChild(rn); row.appendChild(fd); row.appendChild(go);
     box.appendChild(row);
   });
 }
@@ -1576,8 +1689,13 @@ function renderWardrobe() {
       const ok = item.need();
       const b = document.createElement('button');
       b.className = 'wrItem' + (cur === item.id ? ' sel' : '') + (ok ? '' : ' locked');
-      b.textContent = ok ? L(item.name) : '🔒 ' + L(item.name);
+      const worn = cur === item.id;
+      b.textContent = (worn ? '✓ ' : ok ? '' : '🔒 ') + L(item.name);
       b.title = ok ? L(item.name) : L('Locked — {req}', { req: L(item.req) });
+      // never colour-only: "worn" and "locked" are both said in words for a screen reader
+      b.setAttribute('aria-pressed', worn ? 'true' : 'false');
+      b.setAttribute('aria-label', L(item.name) + ' — ' +
+        (ok ? L(worn ? 'worn' : 'not worn') : L('Locked — {req}', { req: L(item.req) })));
       if (ok) b.addEventListener('click', () => { setWardrobe(slot, item.id); renderWardrobe(); });
       else { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
       box.appendChild(b);

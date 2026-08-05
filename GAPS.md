@@ -64,14 +64,22 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 11. ✅ ~~No way to see which buddy is which level~~ — the 🐾 Buddies panel lists each one with level, mood and happiness bar.
 12. ✅ ~~No feeding action~~ — feed buddies berries (found in seeds) from the 🐾 panel; raises happiness and grants XP.
 13. ✅ ~~Buddies cannot be renamed~~ — rename any buddy from the 🐾 panel.
-14. No way to dismiss/release a buddy, so a mis-befriended slime is permanent.
+14. ✅ ~~No way to release a buddy~~ — **Pulangkan** in the 🐾 panel sends a slime home. It is
+    the quietest button in the row and asks for confirmation first, because a child will hit it by
+    mistake at least once.
 15. Wardrobe has only 2 slots (hat, cape). No shoes, wings, colours, or face accessories.
 16. Miru's own colours cannot be changed — no character customisation at all.
 17. ✅ ~~No fast travel~~ — waypoint pillars unlock on touch and the 🧭 panel teleports you back to any of them.
 18. ✅ ~~No map or compass~~ — a round minimap (bottom-right) shows islands, home 🏠, the Skykeeper ✦ and a home-compass when you wander off; M enlarges it.
 19. Partly closed — rift gates and waypoint pillars are now two more landmark types, but the promised waterfall ring and lighthouse are still missing.
 20. Weather (mist, petals, snow) was planned and never built.
-21. Only one quest chain; after 6 quests the Skykeeper has nothing new to say.
+21. ✅ ~~After 6 quests the Skykeeper has nothing new to say.~~ — **12 quests now.** The six new
+    ones lean on the systems that arrived later: clear a rift, wake three waypoints, feed five
+    berries, gather five buddies, reach rift depth three, find ten moonpetals. The risky part was
+    the saved snapshot: a child mid-quest today has a save with none of the new counters, which
+    would have turned into `NaN` and made the quest impossible to finish forever. Guarded, and
+    `test/quests.test.mjs` loads exactly such an old save to prove it. Still one chain, still one
+    NPC (#22).
 22. No side quests from other NPCs — there are no other NPCs at all.
 23. No cutscenes or story beats beyond dialogue boxes.
 24. Journal counts things but shows no pictures — a codex without images is dull for pre-readers.
@@ -104,11 +112,14 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
     Covered by `test/signup.test.mjs`, driven at a 420 px phone width.
     *Honest consequence:* a blank email means no email password recovery — the parent resets it,
     which was already the only recovery path.
-41. No CSP or security headers (`X-Frame-Options`, `Referrer-Policy`, etc.).
+41. ✅ ~~No security headers.~~ — `vercel.json` sets CSP, `X-Frame-Options: DENY`, nosniff,
+    `Referrer-Policy`, HSTS and a `Permissions-Policy`, plus `no-store` on `/api/`. The CSP was
+    narrowed to the hosts actually used (`unpkg.com` for three.js) after checking — a guessed CSP
+    would have broken the whole game for every child at once.
 42. Session cookies never rotate and cannot be revoked server-side (no logout-everywhere).
 43. Password rules are minimal (8 chars, nothing else) and there is no strength meter.
 44. No lockout/backoff after repeated failed logins (see #5).
-45. The Neon database password was pasted into a chat and **still has not been rotated**.
+45. ✅ ~~The Neon database password was pasted into a chat.~~ — rotated by you.
 
 ## 🎨 Graphics pass (from real screenshots this session)
 - [x] Flat single-colour sky → gradient sky dome (zenith=sky, horizon=fog) that follows the camera and blends into the fog, plus a soft sun disc + glow that fades at night.
@@ -158,8 +169,11 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
 50. No error monitoring: if the game throws on a child's phone, nobody ever finds out.
 51. No offline indicator when the server sync fails (only a transient toast).
 52. Service worker never notifies about a new version; a stale shell can persist.
-53. PWA icon is a single SVG — Android prefers 192/512 PNG icons for a crisp home-screen icon.
-54. Manifest forces `landscape`, which fights portrait-holding children.
+53. ~~PWA icon is a single SVG.~~ ✅ Real 192/512 PNG icons generated and precached by the
+    service worker, so the home-screen icon is crisp on Android.
+54. ~~Manifest forces `landscape`.~~ ✅ Now `any`. This exposed a worse bug: on a phone held
+    upright the journal, wardrobe and pause cards were taller than the screen with no scroll,
+    so the top was cut off and Close could not be reached. All three now scroll.
 55. No handling for localStorage being full or blocked (private mode).
 56. Progress payload has a 200 KB cap but the game never warns before hitting it.
 57. Many builds in one place will still hurt low-end phones — no instancing for placed pieces.
@@ -168,7 +182,8 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
 ## 🟡 Accessibility
 
 59. No keyboard-only path for building/riding on desktop without a mouse.
-60. Colour is the only signal for locked wardrobe items (plus a lock emoji) — no text state.
+60. ~~Colour is the only signal for wardrobe state.~~ ✅ Locked items already showed a reason;
+    the item you are *wearing* now says so too (✓ plus `aria-pressed` and a spoken label).
 61. No screen-reader landmarks on the game HUD.
 62. Dialogue cannot be re-read once dismissed — no log.
 63. No subtitles/visual cue for audio events for deaf players.
@@ -187,7 +202,7 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
 72. Music is generative and can get repetitive over long sessions.
 73. No haptics beyond pickup.
 74. No credits screen.
-75. No 404 page.
+75. ~~No 404 page.~~ ✅ Indonesian 404 with a way back to the game and to the front page.
 76. No favicon set beyond the emoji SVG.
 77. No analytics at all, so there is no evidence about where children get bored.
 78. No A/B or telemetry on unlock pacing — spark thresholds are guesses.
@@ -217,9 +232,20 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
   accounts, parent recovery, rate limiting, tests + CI). Also #40 (children no longer type an email)
   and #44 (login backoff).
 - **Closed since:** fast travel + waypoints, rift gates in the world, five dungeon depths, energy
-  regeneration, two graphics artefacts, and self-service child sign-up.
-- **Still open:** ~78 items, **none of which need you rather than me.** Nothing blocks handing the
+  regeneration, two graphics artefacts, self-service child sign-up, 12 badges, the family board,
+  a 12-quest Skykeeper chain, releasing a buddy, security headers, real PWA icons, and a 404 page.
+- **Found by testing, not by eye:** allowing portrait in the manifest revealed that the journal,
+  wardrobe and pause cards were taller than a phone screen with no scroll — the top was cut off and
+  Close was unreachable. Fixed. This is the second time this pass a headless screenshot caught
+  something that reading the code would not have.
+- **Still open:** ~70 items, **none of which need you rather than me.** Nothing blocks handing the
   game to a child this afternoon.
+
+## Test suite
+
+`i18n`, `world`, `dungeon`, `shop`, `badges`, `family`, `signup`, `quests` all pass headless.
+`browser` reports CHECK locally because `/api/*` has no server on a static file host — that is
+expected, not a failure.
 
 ## Suggested order of work
 
@@ -228,9 +254,12 @@ accounts are deliberately left for the children to create themselves — which i
 screen was rebuilt around a child working alone (#40).
 
 **Next up for me, highest value first:**
-1. ~~Translate account, dashboard and landing pages.~~ ✅ Done — whole site is Indonesian.
-2. Buddy naming + feeding (#12, #13) — naming a pet is the strongest attachment lever we are missing.
-3. Map / compass (#18) — children currently get lost in an endless world with no way to orient.
-4. Real Terms & Privacy pages instead of `alert()` popups (#38).
-5. Per-field save merge (#9) to close the last data-loss path.
-6. Photo mode (#29) — the sharing hook siblings will actually use.
+1. Children seeing each other's islands (#31) — the family board proves they exist; this would let
+   them visit. The single biggest remaining thing for twelve siblings playing at once.
+2. Journal with pictures (#24) — the codex is numbers only, which is dull for a child who cannot
+   read fluently yet.
+3. A second NPC with side quests (#22) — there is still exactly one voice in the world.
+4. Waterfall and lighthouse landmarks (#19) — promised, still missing.
+5. Weather (#20) and something to do at night (#27) — the day/night cycle currently changes nothing.
+6. Error monitoring (#50) — if the game throws on a child's phone this afternoon, nobody finds out.
+7. VRM size (#46) — 6.7 MB is still the biggest download on a slow connection.
