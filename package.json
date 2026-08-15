@@ -19,6 +19,7 @@
     "test:signup": "node test/signup.test.mjs",
     "test:quests": "node test/quests.test.mjs",
     "test:portrait": "node test/portrait.test.mjs",
+    "test:controls": "node test/controls.test.mjs",
     "check": "node --input-type=module --check < play/game.js && node --input-type=module --check < play/i18n.js && node --check play/account.js && node --check play/sw.js"
   },
   "dependencies": {

@@ -157,6 +157,7 @@ export const STRINGS = {
     'You stepped into a Sky Rift. Find {n} sky crystals!': 'Kamu masuk ke Celah Langit. Temukan {n} kristal langit!',
     'The rift chest opened! Walk into it.': 'Peti celah terbuka! Jalan ke sana.',
     'Rift cleared! +{n} Seeds. Well done!': 'Celah selesai! +{n} Biji. Hebat!',
+    'Take your time. Tap LEAVE when you are ready.': 'Santai saja. Tekan KELUAR kalau sudah siap.',
     'You slipped back out of the rift.': 'Kamu keluar lagi dari celah.',
     'No energy left — refill in the 🌰 shop or come back later.': 'Energi habis — isi ulang di kedai 🌰 atau kembali nanti.',
     'Rifts cleared': 'Celah selesai',

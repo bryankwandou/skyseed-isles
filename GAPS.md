@@ -234,6 +234,8 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
 - **Closed since:** fast travel + waypoints, rift gates in the world, five dungeon depths, energy
   regeneration, two graphics artefacts, self-service child sign-up, 12 badges, the family board,
   a 12-quest Skykeeper chain, releasing a buddy, security headers, real PWA icons, and a 404 page.
+- **Closed from the QA report:** the inverted stick, dead controls on desktop, and the complete
+  absence of a landscape layout. See below.
 - **Found by testing, not by eye:** allowing portrait in the manifest revealed that the journal,
   wardrobe and pause cards were taller than a phone screen with no scroll — the top was cut off and
   Close was unreachable. Fixed. This is the second time this pass a headless screenshot caught
@@ -241,17 +243,65 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
 - **Still open:** ~70 items, **none of which need you rather than me.** Nothing blocks handing the
   game to a child this afternoon.
 
+## 🎮 Controls — the QA report, item by item
+
+- ✅ **~~Joystick and keys inverted~~ — FIXED & MEASURED.** `iz` was built backward-positive while
+  the vectors that consume it were written forward-positive, so W and stick-up drove the child
+  *toward* the camera. Every direction is now measured against where the camera actually looks:
+  W `+0.34` (was `−0.30`), S `−0.35`, D `+0.35`, A `−0.35`, stick-up `+0.83`, stick-right `+0.83`.
+- ✅ **~~Buttons not integrated / controls dead on desktop~~ — FIXED.** The stick and the JUMP/POW
+  buttons listened for `touchstart` only, so a mouse or a touchscreen laptop got nothing. They now
+  run on Pointer Events — one path for finger, stylus and mouse — plus a keyboard path (`click`
+  with `detail 0`) so Tab + Enter works. The knob also releases on window blur, so a lost pointer
+  can no longer leave a child walking forever.
+- ✅ **~~No landscape layout at all~~ — ADDED.** A landscape block for short screens shrinks the
+  stick and buttons, tightens the side columns, and tucks everything inside
+  `env(safe-area-inset-*)` (with `viewport-fit=cover`) so a notch or home bar never covers the
+  stick. Measured at 780×390: all 9 controls on screen, none under 40 px, none overlapping.
+- ✅ **~~Controls never appear on mobile~~ — NOT REPRODUCED, and hardened anyway.** On an emulated
+  phone the stick is present and nothing covers it (`elementFromPoint` → `stick`). The old CSS
+  gated visibility on `(pointer:coarse)` alone, which hides the controls on a touchscreen laptop
+  that also reports a mouse; visibility is now driven by a `body.touchUI` class set from the same
+  check the input code uses, so what a child sees always matches what responds.
+- ⚠️ **Floor fall-through ("lantai tembus") — INVESTIGATED, CAUSE NOT FOUND.** Two plausible
+  causes ruled out: frame-time spikes (`dt` is already clamped to 0.05, so no tunnelling) and
+  island streaming (`KEEP_R` 4 > `GEN_R` 3, so ground under the player is never unloaded).
+  **Needs one detail to go further:** where it happens — island edge, after a double jump, or on
+  leaving a dungeon.
+- ✅ **~~A cleared rift ejected the child~~ — FIXED.** Found by the test suite disagreeing with the
+  code: claiming the chest ran `setTimeout(exitDungeon, 1800)`, so the child was yanked out of the
+  room 1.8 seconds after opening the treasure, mid-celebration, with no say in it. The room now
+  stays open and LEAVE is the child's own choice. **This test had been passing by luck** — under
+  heavy load the timer fired late enough to look correct, which is why it was previously written
+  off as a flaky test rather than the real bug it was pointing at.
+- ⚠️ **Buildings flickering, dungeon walls passable, no interiors** — not yet reproduced. Unlike
+  the items above these are not one-line fixes; interiors (house/cave/mountain/arena) are new
+  features, not repairs.
+- ❌ **Real-time co-op with sub-4 ms latency — NOT POSSIBLE AS SPECIFIED.** Under 4 ms round trip
+  over the internet is ruled out by the speed of light in fibre (Jakarta–Singapore alone is ~5 ms),
+  independent of code quality. Real-time play is worth building (#31); the 4 ms figure is not a
+  target that any implementation can meet and should be corrected with whoever set it.
+
 ## Test suite
 
-`i18n`, `world`, `dungeon`, `shop`, `badges`, `family`, `signup`, `quests` all pass headless.
-`browser` reports CHECK locally because `/api/*` has no server on a static file host — that is
-expected, not a failure.
+`i18n`, `world`, `dungeon`, `shop`, `badges`, `family`, `signup`, `quests`, `portrait`, `controls`
+all pass headless. `browser` reports CHECK locally because `/api/*` has no server on a static file
+host — that is expected, not a failure.
+
+`controls` is new: it never reads the code, it presses a key or drags the knob and then measures
+which way the body moved relative to where the camera is looking. It also drives the phone layout
+through a real touchscreen on a fresh mobile page — an earlier version resized the desktop page
+instead and reported the stick dead when it was fine, so the test was wrong, not the game.
 
 ## Suggested order of work
 
 **Needs you: nothing is blocking any more.** The database password is rotated, and the twelve
 accounts are deliberately left for the children to create themselves — which is why the sign-up
 screen was rebuilt around a child working alone (#40).
+
+**Needs you, one line:** where does a child fall through the floor? Island edge, after a double
+jump, or leaving a dungeon? Two causes are already ruled out and that sentence narrows the rest
+far faster than guessing would.
 
 **Next up for me, highest value first:**
 1. Children seeing each other's islands (#31) — the family board proves they exist; this would let
