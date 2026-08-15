@@ -2001,7 +2001,11 @@ function claimDungeonReward() {
   burst(player.position.clone().add(new THREE.Vector3(0, 1.5, 0)), 0xffd98a, 26);
   chime(1500);
   say(L('Rift cleared! +{n} Seeds. Well done!', { n: pay }));
-  setTimeout(() => exitDungeon(true), 1800);
+  // Claiming the chest must not eject the child. It used to yank them out 1.8s later,
+  // in the middle of their own celebration and with no say in it — which is how a
+  // cleared room came to feel broken. Leaving is its own choice, via the LEAVE button,
+  // the way every open-world dungeon does it.
+  setTimeout(() => say(L('Take your time. Tap LEAVE when you are ready.')), 2600);
 }
 
 function updateDungeonHud() {
@@ -2146,6 +2150,7 @@ window.__sky = {
     inDungeon,
     found: dungeonFound,
     player: [player.position.x, player.position.y, player.position.z].map(n => +n.toFixed(2)),
+    yaw: +camYaw.toFixed(3),
     camera: [camera.position.x, camera.position.y, camera.position.z].map(n => +n.toFixed(2)),
     roomAt: dungeonGroup ? [dungeonGroup.position.x, dungeonGroup.position.y, dungeonGroup.position.z] : null,
     crystals: collect.filter(c => c.kind === 'dcrystal').length,
@@ -2189,7 +2194,18 @@ window.__sky = {
     player.position.set(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z);
     return true;
   },
-  toChest: () => { player.position.set(DUNGEON_X, 0, DUNGEON_Z); }
+  toChest: () => { player.position.set(DUNGEON_X, 0, DUNGEON_Z); },
+  // Put the child on open ground with the camera at a known angle, so a control test
+  // measures the direction the game sends them and not whatever tree they walked into.
+  // Returns the widest island's centre so the caller knows where it landed them.
+  clearGround: () => {
+    let best = islands[0];
+    for (const i of islands) if (i.r > best.r) best = i;
+    player.position.set(best.x, best.y + 0.2, best.z);
+    vel.set(0, 0, 0);
+    camYaw = 0; camPitch = 0.32; camSnap = true;
+    return { x: best.x, z: best.z, r: best.r };
+  }
 };
 
 const dungeonBtn = $('dungeonBtn');
@@ -2225,7 +2241,14 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 let camYaw = 0, camPitch = 0.32, camDist = 9;
 // set true whenever the player is teleported, so the camera lands instead of flying there
 let camSnap = false;
-const isTouch = matchMedia('(pointer:coarse)').matches;
+const isTouch = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0;
+// CSS alone used `(pointer:coarse)`, which hides the stick on a touchscreen laptop that
+// also reports a mouse. Drive it from a body class instead, using the same test the rest
+// of the game uses, so what a child sees matches what actually responds to their finger.
+document.body.classList.toggle('touchUI', isTouch);
+// remembered so a tap on the world does not ask for pointer lock, which only suits a mouse
+let lastPointerType = 'mouse';
+renderer.domElement.addEventListener('pointerdown', e => { lastPointerType = e.pointerType; }, true);
 // raycaster used to keep the camera from clipping through trees/decorations
 const camRay = new THREE.Raycaster();
 camRay.far = 40;
@@ -2241,6 +2264,8 @@ function camRayBlocks(obj) {
 renderer.domElement.addEventListener('click', () => {
   if (!started) return;
   if (buildMode) { placeBuild(); return; }
+  // pointer lock is a mouse idea; on a finger it does nothing but swallow the tap
+  if (lastPointerType !== 'mouse') return;
   if (document.pointerLockElement !== renderer.domElement) {
     renderer.domElement.requestPointerLock();
   } else {
@@ -2280,31 +2305,59 @@ const endCamTouch = e => {
 renderer.domElement.addEventListener('touchend', endCamTouch);
 renderer.domElement.addEventListener('touchcancel', endCamTouch);
 
+// The stick and the action buttons run on Pointer Events, not touch events. One code path
+// then serves a finger, a stylus, and a mouse — a touchscreen laptop and a plain desktop
+// browser both work, where the old touch-only listeners left the controls completely dead.
+// Sizes are read from the live element instead of hardcoded, so the landscape layout
+// (which shrinks the stick) still centres its knob correctly.
 const stickVec = { x: 0, y: 0 };
 const stickEl = $('stick'), knob = $('knob');
 if (stickEl) {
   let sid = null;
-  stickEl.addEventListener('touchstart', e => { sid = e.changedTouches[0].identifier; }, { passive: true });
-  stickEl.addEventListener('touchmove', e => {
-    for (const t of e.changedTouches) {
-      if (t.identifier !== sid) continue;
-      const r = stickEl.getBoundingClientRect();
-      let dx = (t.clientX - (r.left + 64)) / 52, dy = (t.clientY - (r.top + 64)) / 52;
-      const len = Math.hypot(dx, dy); if (len > 1) { dx /= len; dy /= len; }
-      stickVec.x = dx; stickVec.y = dy;
-      knob.style.left = 40 + dx * 34 + 'px'; knob.style.top = 40 + dy * 34 + 'px';
-    }
-  }, { passive: true });
-  const end = () => { stickVec.x = stickVec.y = 0; knob.style.left = '40px'; knob.style.top = '40px'; };
-  stickEl.addEventListener('touchend', end); stickEl.addEventListener('touchcancel', end);
+  const centreKnob = () => {
+    const rad = stickEl.offsetWidth / 2;
+    knob.style.left = (rad - knob.offsetWidth / 2) + 'px';
+    knob.style.top = (rad - knob.offsetHeight / 2) + 'px';
+  };
+  const aim = e => {
+    const r = stickEl.getBoundingClientRect();
+    const rad = r.width / 2, reach = rad * 0.82;
+    let dx = (e.clientX - (r.left + rad)) / reach, dy = (e.clientY - (r.top + rad)) / reach;
+    const len = Math.hypot(dx, dy); if (len > 1) { dx /= len; dy /= len; }
+    stickVec.x = dx; stickVec.y = dy;
+    knob.style.left = (rad - knob.offsetWidth / 2 + dx * rad * 0.53) + 'px';
+    knob.style.top = (rad - knob.offsetHeight / 2 + dy * rad * 0.53) + 'px';
+  };
+  const release = e => {
+    if (sid !== null && e.pointerId !== sid) return;
+    sid = null; stickVec.x = stickVec.y = 0; centreKnob();
+  };
+  stickEl.addEventListener('pointerdown', e => {
+    if (sid !== null) return;
+    e.preventDefault();
+    sid = e.pointerId;
+    // capture so a thumb that slides off the circle keeps steering instead of freezing
+    try { stickEl.setPointerCapture(sid); } catch (_) {}
+    aim(e);
+  });
+  stickEl.addEventListener('pointermove', e => { if (e.pointerId === sid) aim(e); });
+  stickEl.addEventListener('pointerup', release);
+  stickEl.addEventListener('pointercancel', release);
+  // a lost pointer must not leave the child walking forever
+  addEventListener('blur', release);
+  addEventListener('resize', centreKnob);
+  centreKnob();
 }
-$('jumpBtn').addEventListener('touchstart', e => { e.preventDefault(); jumpPressed = true; });
-$('jumpBtn').addEventListener('click', () => { jumpPressed = true; });
+// pointerdown fires for mouse, touch and pen; the click fallback (detail 0) is the
+// keyboard path, so Tab + Enter on the buttons works for a child using a keyboard.
+function pressBtn(el, fn) {
+  if (!el) return;
+  el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
+  el.addEventListener('click', e => { if (e.detail === 0) fn(); });
+}
+pressBtn($('jumpBtn'), () => { jumpPressed = true; });
 const punchBtn = $('punchBtn');
-if (punchBtn) {
-  punchBtn.addEventListener('touchstart', e => { e.preventDefault(); punchPressed = true; });
-  punchBtn.addEventListener('click', () => { punchPressed = true; });
-}
+pressBtn(punchBtn, () => { punchPressed = true; });
 
 // ---------- physics + loop ----------
 const vel = new THREE.Vector3();
@@ -2499,12 +2552,15 @@ function animate() {
 
   // keyboard camera rotate fallback (Q/E) for kids without a mouse
   if (keys.KeyQ) camYaw += dt * 2.2;
-  if (keys.KeyE && !punchPressed) { /* E reserved for punch; Q rotates */ }
 
   if (started) {
-    // camera-relative movement using free-look yaw
+    // Camera-relative movement. `iz` is FORWARD-positive: pushing W, or the stick up,
+    // walks away from the camera, into the world. It used to be built backward-positive
+    // while the vectors below were written forward-positive, so W drove the child
+    // backwards and the stick answered every thumb with the opposite direction.
+    // Screen-down on the stick (stickVec.y > 0) means "come back", hence the minus.
     let ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + stickVec.x;
-    let iz = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0) + stickVec.y;
+    let iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - stickVec.y;
     const len = Math.hypot(ix, iz);
     if (len > 1) { ix /= len; iz /= len; }
     running = len > 0.05;

@@ -65,8 +65,12 @@ console.log('EN after toggle:', JSON.stringify(en));
 const idOk = id.htmlLang === 'id' && id.start === 'Mulai Petualangan' && id.sparks === 'Kilau'
   && id.buddies === 'Teman' && id.build === 'Bangun' && id.pet === '♥ Elus'
   && /Penjaga Langit/.test(id.quest);
+// Wardrobe rows carry a state marker before the name — '✓ ' for the item being worn, '🔒 ' for
+// one still locked — so that worn/locked is spoken by a symbol and not by colour alone. Strip it
+// before checking the translation, but keep checking the marker itself is one of the two.
+const hatMark = overlays.hat.match(/^([✓🔒]\s*)?(.*)$/);
 const overlaysOk = overlays.journal === 'Jurnal Langit' && overlays.wardrobe === 'Lemari Baju Miru'
-  && overlays.hat === 'Tanpa topi' && /Kumpulkan|Temukan|Selesaikan/.test(overlays.req);
+  && hatMark[2] === 'Tanpa topi' && /Kumpulkan|Temukan|Selesaikan/.test(overlays.req);
 const enOk = en.htmlLang === 'en' && en.sparks === 'Sparks' && en.build === 'Build';
 console.log('indonesian OK:', idOk, '| overlays OK:', overlaysOk, '| english toggle OK:', enOk);
 console.log('page errors:', errs.length ? errs.join(' | ') : '(none)');

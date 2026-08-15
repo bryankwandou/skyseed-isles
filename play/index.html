@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<!-- viewport-fit=cover lets the landscape layout below read env(safe-area-inset-*), so a
+     notch or a home bar never sits on top of the joystick on a phone held sideways -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Skyseed Isles — Play</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>" />
 <link rel="manifest" href="./manifest.webmanifest" />
@@ -51,20 +53,47 @@
     align-items:center; justify-content:center; user-select:none; touch-action:none;
   }
   .tbtn:active { background:rgba(255,255,255,.55); }
-  #jumpBtn { right:24px; bottom:36px; width:80px; height:80px; font-size:16px; }
+  #jumpBtn {
+    right:calc(24px + env(safe-area-inset-right)); bottom:calc(36px + env(safe-area-inset-bottom));
+    width:80px; height:80px; font-size:16px;
+  }
   #stick {
-    position:fixed; left:24px; bottom:28px; z-index:20; width:128px; height:128px;
+    position:fixed; left:calc(24px + env(safe-area-inset-left));
+    bottom:calc(28px + env(safe-area-inset-bottom));
+    z-index:20; width:128px; height:128px;
     border-radius:50%; border:2px solid rgba(255,255,255,.55);
     background:rgba(255,255,255,.18); display:none; touch-action:none;
   }
   #knob {
     position:absolute; left:40px; top:40px; width:48px; height:48px; border-radius:50%;
-    background:rgba(255,255,255,.75);
+    background:rgba(255,255,255,.75); pointer-events:none;
+    transition:left .06s linear, top .06s linear;
   }
-  @media (pointer:coarse) {
-    .tbtn, #stick { display:flex; }
-    #stick { display:block; }
-    #help { display:none; }
+  /* game.js sets .touchUI from the same check the input code uses, so a touchscreen
+     laptop that also reports a mouse still gets controls it can actually press */
+  body.touchUI .tbtn { display:flex; }
+  body.touchUI #stick { display:block; }
+  body.touchUI #help { display:none; }
+
+  /* Landscape phones — the way most children will hold this. Short screens, so every
+     control shrinks and tucks inside the safe area, and the side buttons stack tighter
+     so they never land under the thumbs resting on the stick and JUMP. */
+  @media (orientation:landscape) and (max-height:520px) {
+    #stick { width:104px; height:104px; left:calc(14px + env(safe-area-inset-left)); bottom:calc(12px + env(safe-area-inset-bottom)); }
+    #knob { width:40px; height:40px; }
+    .tbtn { width:58px; height:58px; font-size:17px; }
+    #jumpBtn { width:66px; height:66px; font-size:14px; right:calc(16px + env(safe-area-inset-right)); bottom:calc(12px + env(safe-area-inset-bottom)); }
+    #punchBtn { right:calc(90px + env(safe-area-inset-right)) !important; bottom:calc(18px + env(safe-area-inset-bottom)) !important; }
+    #hud { top:calc(6px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left)); font-size:13px; line-height:1.45; padding:6px 11px; }
+    #accountBar { top:calc(6px + env(safe-area-inset-top)); right:calc(8px + env(safe-area-inset-right)); font-size:11px; padding:5px 9px; }
+    #msg { top:calc(6px + env(safe-area-inset-top)); font-size:13px; padding:6px 16px; max-width:52vw; overflow:hidden; text-overflow:ellipsis; }
+    #pauseBtn { top:calc(74px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left)); }
+    #journalBtn { top:calc(122px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left)); }
+    #wardrobeBtn { top:calc(170px + env(safe-area-inset-top)); left:calc(8px + env(safe-area-inset-left)); }
+    #buildBtn { top:calc(62px + env(safe-area-inset-top)); right:calc(16px + env(safe-area-inset-right)); }
+    #careBtn { top:calc(110px + env(safe-area-inset-top)); right:calc(16px + env(safe-area-inset-right)); }
+    #rideBtn { top:calc(158px + env(safe-area-inset-top)); right:calc(16px + env(safe-area-inset-right)); }
+    #journalCard, #wardrobeCard, #pauseCard { max-height:94vh; }
   }
   /* accessibility modes */
   body.hiContrast #hud, body.hiContrast #accountBar, body.hiContrast #msg {
