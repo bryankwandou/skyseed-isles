@@ -53,6 +53,57 @@
     align-items:center; justify-content:center; user-select:none; touch-action:none;
   }
   .tbtn:active { background:rgba(255,255,255,.55); }
+  /* Press feedback. QA's note was "kontroller tidak ada animasi sama sekali" — a button
+     that does not move under a thumb reads as broken even when it fired. :active alone is
+     not enough once pointer capture is in play, so game.js drives .pressed as well. */
+  .tbtn, #knob { transition:transform .09s cubic-bezier(.3,1.4,.5,1), background .12s, box-shadow .12s; }
+  .tbtn.pressed {
+    transform:scale(.88); background:rgba(255,255,255,.62);
+    box-shadow:0 0 0 6px rgba(255,255,255,.18), 0 4px 14px rgba(20,40,80,.3);
+  }
+  .tbtn:focus-visible, #stick:focus-visible { outline:3px solid #ffe98a; outline-offset:3px; }
+  /* the ring pulses out from the button so the press is visible even mid-scroll */
+  .tbtn .ring {
+    position:absolute; inset:0; border-radius:50%; border:2px solid rgba(255,255,255,.9);
+    opacity:0; pointer-events:none;
+  }
+  .tbtn.pressed .ring { animation:btnRing .42s ease-out; }
+  @keyframes btnRing {
+    from { opacity:.85; transform:scale(1); }
+    to   { opacity:0;   transform:scale(1.75); }
+  }
+  /* the side HUD buttons get the same acknowledgement, just quieter */
+  #pauseBtn, #journalBtn, #wardrobeBtn, #photoBtn, #dungeonBtn, #buildBtn, #careBtn, #rideBtn {
+    transition:transform .09s cubic-bezier(.3,1.4,.5,1), background .12s, box-shadow .12s;
+  }
+  .hudTap { transform:scale(.9) !important; background:rgba(255,255,255,.55) !important; }
+  @media (prefers-reduced-motion:reduce) { .hudTap { transform:none !important; } }
+  /* doorway buttons — big, central and low, where a thumb already is */
+  .doorBtn {
+    position:fixed; z-index:24; display:none; left:50%; transform:translateX(-50%);
+    bottom:calc(120px + env(safe-area-inset-bottom));
+    padding:12px 26px; border-radius:14px; border:2px solid rgba(255,255,255,.8);
+    background:linear-gradient(135deg,#ff8fb8,#a06bf0); color:#fff;
+    font-size:16px; font-weight:800; letter-spacing:.03em; cursor:pointer; user-select:none;
+    box-shadow:0 8px 24px rgba(20,40,80,.3);
+  }
+  .doorBtn:focus-visible { outline:3px solid #ffe98a; outline-offset:3px; }
+  @media (orientation:landscape) and (max-height:520px) {
+    .doorBtn { bottom:calc(86px + env(safe-area-inset-bottom)); padding:9px 20px; font-size:14px; }
+  }
+  #viewBtn {
+    position:fixed; z-index:22; right:24px; top:240px; width:64px; height:44px;
+    border-radius:14px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
+    color:#fff; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+  }
+  #stick.pressed { background:rgba(255,255,255,.3); border-color:rgba(255,255,255,.85); }
+  #knob.pressed { background:#fff; transform:scale(1.12); box-shadow:0 3px 12px rgba(20,40,80,.35); }
+  @media (prefers-reduced-motion:reduce) {
+    .tbtn, #knob { transition:background .12s; }
+    .tbtn.pressed, #knob.pressed { transform:none; }
+    .tbtn.pressed .ring { animation:none; }
+  }
   #jumpBtn {
     right:calc(24px + env(safe-area-inset-right)); bottom:calc(36px + env(safe-area-inset-bottom));
     width:80px; height:80px; font-size:16px;
@@ -93,6 +144,7 @@
     #buildBtn { top:calc(62px + env(safe-area-inset-top)); right:calc(16px + env(safe-area-inset-right)); }
     #careBtn { top:calc(110px + env(safe-area-inset-top)); right:calc(16px + env(safe-area-inset-right)); }
     #rideBtn { top:calc(158px + env(safe-area-inset-top)); right:calc(16px + env(safe-area-inset-right)); }
+    #viewBtn { top:calc(206px + env(safe-area-inset-top)); right:calc(16px + env(safe-area-inset-right)); width:56px; height:38px; font-size:13px; }
     #journalCard, #wardrobeCard, #pauseCard { max-height:94vh; }
   }
   /* accessibility modes */
@@ -397,6 +449,36 @@
   .setRow input[type=range] { width:150px; accent-color:#a06bf0; }
   .setRow select { padding:6px 10px; border-radius:8px; border:1.5px solid #d6e2ee; font-size:14px; }
   .setRow input[type=checkbox] { width:18px; height:18px; accent-color:#a06bf0; }
+  .setRow input[type=range] { min-width:0; }
+  .setVal { min-width:44px; text-align:right; font-variant-numeric:tabular-nums; font-size:12px; color:#5b6f88; }
+  .setSection {
+    margin:16px 0 6px; padding-top:10px; border-top:1.5px solid #eef3f8;
+    font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#8aa0b8;
+  }
+  .setSection:first-of-type { border-top:none; padding-top:0; margin-top:10px; }
+  #fpsMeter {
+    position:fixed; z-index:26; display:none;
+    top:calc(8px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+    background:rgba(20,35,60,.6); color:#dff3ff; font-size:12px; font-weight:700;
+    font-variant-numeric:tabular-nums; padding:3px 9px; border-radius:8px; pointer-events:none;
+  }
+  body.showFps #fpsMeter { display:block; }
+  /* key bindings */
+  .bindRow { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0; font-size:14px; }
+  .bindRow span { font-weight:600; }
+  .bindKey {
+    min-width:96px; min-height:40px; padding:6px 12px; border-radius:10px; cursor:pointer;
+    border:1.5px solid #d6e2ee; background:#f7fafd; color:var(--ink);
+    font-size:13px; font-weight:700; font-family:inherit;
+  }
+  .bindKey:hover { background:#eef5fc; }
+  .bindKey.listening { background:#fff3c4; border-color:#f0c14b; }
+  .bindKey.clash { border-color:#e0553f; color:#c23c28; }
+  .bindKey:focus-visible { outline:3px solid #a06bf0; outline-offset:2px; }
+  .miniBtn {
+    width:100%; margin-top:8px; padding:9px; border-radius:10px; cursor:pointer;
+    border:1.5px solid #d6e2ee; background:#f7fafd; color:#5b6f88; font-size:13px; font-weight:700;
+  }
   #resumeBtn {
     width:100%; margin-top:14px; border:none; cursor:pointer; color:#fff; font-weight:700; font-size:16px;
     padding:12px; border-radius:12px; background:linear-gradient(135deg,#ff8fb8,#a06bf0);
@@ -589,9 +671,44 @@
     <h2 data-i18n="Paused">Paused</h2>
     <div class="setRow"><label for="setMusic" data-i18n="Music">Music</label><input id="setMusic" type="range" min="0" max="1" step="0.05" /></div>
     <div class="setRow"><label for="setSfx" data-i18n="Sounds">Sounds</label><input id="setSfx" type="range" min="0" max="1" step="0.05" /></div>
+    <div class="setSection" data-i18n="Graphics">Graphics</div>
     <div class="setRow"><label for="setQuality" data-i18n="Quality">Quality</label>
-      <select id="setQuality"><option value="high" data-i18n="Pretty">Pretty</option><option value="low" data-i18n="Fast">Fast</option></select>
+      <select id="setQuality">
+        <option value="potato" data-i18n="Potato">Potato</option>
+        <option value="low" data-i18n="Fast">Fast</option>
+        <option value="medium" data-i18n="Balanced">Balanced</option>
+        <option value="high" data-i18n="Pretty">Pretty</option>
+        <option value="ultra" data-i18n="Ultra">Ultra</option>
+        <option value="custom" data-i18n="Custom">Custom</option>
+      </select>
     </div>
+    <div class="setRow"><label for="setScale" data-i18n="Sharpness">Sharpness</label>
+      <input id="setScale" type="range" min="0.5" max="2" step="0.05" /><span id="setScaleV" class="setVal">100%</span>
+    </div>
+    <div class="setRow"><label for="setShadows" data-i18n="Shadows">Shadows</label>
+      <select id="setShadows">
+        <option value="off" data-i18n="Off">Off</option>
+        <option value="soft" data-i18n="Soft">Soft</option>
+        <option value="sharp" data-i18n="Sharp">Sharp</option>
+      </select>
+    </div>
+    <div class="setRow"><label for="setView" data-i18n="See how far">See how far</label>
+      <input id="setView" type="range" min="90" max="320" step="10" /><span id="setViewV" class="setVal">180</span>
+    </div>
+    <div class="setRow"><label for="setFx" data-i18n="Sparkles">Sparkles</label>
+      <input id="setFx" type="range" min="0" max="1.5" step="0.05" /><span id="setFxV" class="setVal">100%</span>
+    </div>
+    <div class="setRow"><label for="setFpsCap" data-i18n="Frame limit">Frame limit</label>
+      <select id="setFpsCap">
+        <option value="0" data-i18n="No limit">No limit</option>
+        <option value="30">30</option>
+        <option value="45">45</option>
+        <option value="60">60</option>
+      </select>
+    </div>
+    <div class="setRow"><label for="setShowFps" data-i18n="Show FPS">Show FPS</label><input id="setShowFps" type="checkbox" /></div>
+    <div class="setRow"><label for="setAuto" data-i18n="Auto-adjust for my device">Auto-adjust for my device</label><input id="setAuto" type="checkbox" /></div>
+    <div class="setSection" data-i18n="Playing">Playing</div>
     <div class="setRow"><label for="setSens" data-i18n="Camera speed">Camera speed</label><input id="setSens" type="range" min="0.4" max="2" step="0.1" /></div>
     <div class="setRow"><label for="setInvert" data-i18n="Invert look">Invert look</label><input id="setInvert" type="checkbox" /></div>
     <div class="setRow"><label for="setContrast" data-i18n="High contrast">High contrast</label><input id="setContrast" type="checkbox" /></div>
@@ -599,10 +716,14 @@
     <div class="setRow"><label for="setLang" data-i18n="Language">Language</label>
       <select id="setLang"><option value="id">Bahasa Indonesia</option><option value="en">English</option></select>
     </div>
+    <div class="setSection" data-i18n="Keyboard">Keyboard</div>
+    <div id="bindList"></div>
+    <button id="bindReset" class="miniBtn" data-i18n="Reset keys">Reset keys</button>
     <button id="resumeBtn" data-i18n="Back to playing">Back to playing</button>
     <div id="pauseLinks"><a href="./account.html" data-i18n="Account">Account</a><a href="./family.html" data-i18n="Family">Family</a><a href="../index.html" data-i18n="Home">Home</a></div>
   </div>
 </div>
+<div id="fpsMeter" aria-hidden="true">— FPS</div>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="hud">
   <span data-i18n="Sparks">Sparks</span> <b id="cSpark">0</b><br>
@@ -621,6 +742,9 @@
 <button id="buildBtn" aria-label="Toggle build mode" data-i18n="Build">Build</button>
 <button id="careBtn" aria-label="Pet your buddy" data-i18n="♥ Pet">♥ Pet</button>
 <button id="rideBtn" aria-label="Ride your buddy">RIDE</button>
+<button id="viewBtn" aria-label="Switch between your own eyes and the camera behind you">3rd</button>
+<button id="houseEnter" class="doorBtn" aria-label="Go inside the house" data-i18n="ENTER">ENTER</button>
+<button id="houseLeave" class="doorBtn" aria-label="Go back outside" data-i18n="GO OUT">GO OUT</button>
 <div id="palette" aria-label="Building palette">
   <button data-t="tree" class="sel" data-i18n="Tree">Tree</button>
   <button data-t="flower" data-i18n="Flower">Flower</button>

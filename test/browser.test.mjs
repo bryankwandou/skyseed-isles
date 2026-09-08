@@ -197,7 +197,10 @@ try {
   console.log('pause menu OK:', pauseOk);
   const build2Ok = build2.type === 'fence' && build2.rot > 0 && build2.pieces === 9;
   const careOk = /♥|pet+ing|friend|suka|elus/i.test(care.msg || '');
-  const journalOk = journal.on && /\/ 9/.test(journal.biomes) && /\/ 6/.test(journal.quests);
+  // 9 biomes, 12 quests. This read `/ 6` long after the chain grew to twelve, so the
+  // journal check reported false on every run and nobody looked -- a stale assertion is
+  // worse than no assertion, because it makes the real signal look like background noise.
+  const journalOk = journal.on && /\/ 9/.test(journal.biomes) && /\/ 12/.test(journal.quests);
   const pwaOk = pwa.name === 'Skyseed Isles' && pwa.display === 'standalone' && pwa.sw === true;
   const wardrobeOk = wr.on && wr.hats === 4 && wr.capes === 3 && wr.locked > 0 && (!wr.picked || !!wr.saved);
   const rideOk = ride.btnShown && (ride.label === 'RIDE' || ride.label === 'NAIKI') && /riding|menunggangi/i.test(ride.mounted)
