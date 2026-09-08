@@ -141,6 +141,108 @@ Legend: 🔴 blocks handing this to children · 🟠 hurts the experience · �
 - [ ] No wind motion on grass or canopies (variation is static).
 - [ ] Shadows are only cast by the sun light; no ambient occlusion contact shading.
 
+## 🖥️ Graphics options — the "as complete as Genshin" request
+
+The old menu offered two words, *Pretty* and *Fast*, wired to three lines of code. That is not a
+graphics menu, and QA was right to say so. It is now a real one, and every dial is checked against
+the live renderer rather than against the value it stored.
+
+- [x] **Five presets** — Hemat Banget / Cepat / Seimbang / Cantik / Ultra, plus **Atur Sendiri**,
+  which is what the label switches to the moment you move any single dial. Each preset is a bundle
+  of the dials below it, so nothing is hidden.
+- [x] **Sharpness (render scale) 50–200 %** — multiplies the device pixel ratio. Measured: the
+  renderer's own `getPixelRatio()` moves from `0.6` on Potato to `1.35` on Ultra.
+- [x] **Shadows: Off / Soft / Sharp** — off truly disables the shadow map *and* the sun's caster;
+  sharp raises the map from 1024² to 2048². Measured on the renderer, not on the setting.
+- [x] **View distance 90–320** — drives the fog, and now also drives how much world is built
+  (see the pop-in fix below).
+- [x] **Sparkles 0–150 %** — scales every particle burst.
+- [x] **Frame limit: none / 30 / 45 / 60** — a real battery setting. Frames are skipped, but the
+  accumulated delta is carried, so the world moves at the same speed at any cap.
+- [x] **Show FPS** — an on-screen readout.
+- [x] **Auto-adjust for my device** — the governor, now stepping down **one preset at a time**
+  instead of dropping everything at once, and it stops after two steps so it can never spiral.
+- [x] **Everything persists** and the panel re-reads itself, so after an auto-adjust the sliders
+  show what is actually running instead of what you last chose.
+
+### The FPS counter caught a real bug in the old governor
+The frame-rate governor measured itself against the **clamped** frame delta. `dt` is capped at
+50 ms so a stall cannot fling a child across the map — which means counting frames against it
+reports a comfortable 20 FPS on a machine genuinely managing one, and the number can never fall
+far enough to trigger anything. Measured in headless: the governor reported **21 FPS while the
+browser was really running at 1.2**. That is why "auto-adjust" never rescued anyone. It now reads
+`performance.now()`, and the test asserts the reported number matches an independently measured
+one.
+
+## 🧱 Solid world — "lantai tembus dan properti palsu"
+
+Both complaints were the same complaint: nothing in the world pushed back.
+
+- [x] **Trees and pillars were pure decoration.** You could walk through every trunk and every
+  pillar in the game. They now carry cylinder colliders and resolve along the shortest way out, so
+  you slide around a trunk instead of stopping dead on it.
+- [x] **Pillars are platforms now.** A pillar *looks* like something to jump on; children jumped
+  and fell straight through. Pillar caps are standable ground. This is most of what "lantai tembus"
+  was describing.
+- [x] **The floor test sweeps instead of sampling.** Asking only "am I below the floor right now"
+  lets a fast fall step over a thin platform between two frames — the child lands on nothing and
+  keeps going. The test now covers the span the feet actually travelled.
+- [x] **The rift had no walls.** The cave was a disc of floor with a decorative ring around it and
+  nothing else, so walking to the edge dropped you out of the room into the void — the
+  "dungeon/gua tembus, tidak bisa dimasuki" report. It now has a real wall, rendered from the
+  inside so the camera still looks down into the room, and the child is kept inside it.
+- [x] **The rift room shipped without a `solids` list**, which the ground code walks on every
+  island. Adding colliders to the rest of the world would have thrown on every frame inside a
+  dungeon. Caught before it shipped, by the dungeon suite.
+- [x] **Rift pillars are climbable** rather than scenery you walk through.
+
+## 🎮 Controller and camera modes
+
+- [x] **Windows controller support — ADDED.** There was no gamepad code in the project at
+  all, which is the real reason QA could not test a controller: not that it was inverted,
+  but that it was never read. The left stick now feeds **the same two numbers into the same
+  movement line as the on-screen stick**, with the same sign, so the two physically cannot
+  disagree about which way is forward. Right stick looks, bottom face button jumps, left
+  face hits, shoulder buttons open the journal and map, Start pauses, Select flips the
+  camera mode. Dead zone is rescaled rather than cut, so the stick starts at zero instead
+  of jumping to 0.18.
+- [x] **First person and third person — ADDED.** `V`, the on-screen button, or Select on a
+  pad. Third person places the camera at `+(sin yaw, cos yaw)` behind the child, so the
+  direction they walk is exactly `-(sin, cos)`; first person puts the camera at eye height
+  and points it down that same vector. Forward means the same thing in both modes by
+  construction, not by coincidence — and the test measures it in both. The avatar is hidden
+  in first person rather than part-hidden, because a VRM head scaled away leaves a neck
+  stump in shot.
+- [x] Both are covered by `test/pad-view.test.mjs`, which installs a fake `getGamepads`
+  reporting axes the way the Gamepad API specifies (x right, **y down**). If the game ever
+  gets that sign wrong, the test walks the child backwards and fails.
+
+## 🌍 Pop-in — "building masih hilang muncul"
+
+Found, and it was arithmetic, not graphics. The world streamed islands out to `GEN_R 3` — 132
+units — while the fog drew to **180**, and despawned them at 176, still inside clear view. So whole
+islands, trees and pillars included, blinked in and out a third of the way inside the visible range
+every time the player crossed a cell boundary.
+
+- [x] The streamed radius now follows the view distance (3–6 cells), and the fog is pulled in
+  behind the edge of the built world, so islands **fade in** instead of appearing.
+- [x] A first run on a modest phone opens on *Seimbang*, not *Cantik*. A game that starts smooth
+  reads as better than one that starts pretty and stumbles.
+
+## 🎮 Controls — feel and key bindings
+
+- [x] **Press feedback.** "Kontroller tidak ada animasi sama sekali" was accurate: a button that
+  does not move under a thumb reads as broken even when it fired. Every control now shrinks on
+  press, pulses a ring, and buzzes the phone for 12 ms — `:active` alone is not enough once
+  pointer capture is involved, so the state is driven from the input code as well.
+- [x] **Full key rebinding.** All sixteen actions are re-bindable from the pause menu, showing the
+  letter on the cap (`W`, not `KeyW`). One key holds one job — rebinding onto a taken key releases
+  the old one. Arrow keys and right Shift stay wired underneath as permanent alternates, so
+  rebinding W never costs you the arrows. Reset restores everything, and choices survive a reload.
+  Measured: after binding forward to `I`, `I` walks `0.35` and `W` walks `0.00`.
+- [x] Every action a child needs on a phone already had a touch button, including TALK; the
+  rebinding panel is for the desktop children, not a substitute for that.
+
 ## 🛒 Economy & dungeons (new direction — replaces the scrapped time-token)
 
 **Decision:** an on-chain *play-time* token was designed and then **scrapped** — metering or
@@ -164,8 +266,10 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
 
 46. VRM is still 6.7 MB — the single biggest download. Mesh compression untried (texture-only so far).
 47. No skeleton/placeholder for the world while chunks stream in.
-48. No FPS display or diagnostics for debugging a slow device.
-49. `game.js` is ~1,600 lines in a single file — hard to maintain, no modules.
+48. ✅ **~~No FPS display or diagnostics~~ — ADDED.** *Show FPS* in the pause menu, reading the
+    wall clock. It immediately earned its keep: it proved the auto-adjust governor had been
+    measuring a clamped delta and reporting 21 FPS on a machine running at 1.2.
+49. `game.js` is now ~3,000 lines in a single file — hard to maintain, no modules. Growing, not shrinking.
 50. No error monitoring: if the game throws on a child's phone, nobody ever finds out.
 51. No offline indicator when the server sync fails (only a transient toast).
 52. Service worker never notifies about a new version; a stale shell can persist.
@@ -263,20 +367,25 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
   gated visibility on `(pointer:coarse)` alone, which hides the controls on a touchscreen laptop
   that also reports a mouse; visibility is now driven by a `body.touchUI` class set from the same
   check the input code uses, so what a child sees always matches what responds.
-- ⚠️ **Floor fall-through ("lantai tembus") — INVESTIGATED, CAUSE NOT FOUND.** Two plausible
-  causes ruled out: frame-time spikes (`dt` is already clamped to 0.05, so no tunnelling) and
-  island streaming (`KEEP_R` 4 > `GEN_R` 3, so ground under the player is never unloaded).
-  **Needs one detail to go further:** where it happens — island edge, after a double jump, or on
-  leaving a dungeon.
+- ✅ **~~Floor fall-through ("lantai tembus")~~ — FOUND AND FIXED.** The earlier pass looked for
+  a tunnelling bug and found none, which was the wrong question. There was no floor to fall
+  through: **pillars had no collision at all**. A child jumps at a pillar because it looks like a
+  platform, and passes straight down through it. The rift room was worse — a disc of floor with no
+  walls, so walking to the edge dropped you into the void. Pillar caps are now standable ground,
+  the rift has a wall, and the floor test sweeps the span the feet travelled instead of sampling a
+  single instant. See the **Solid world** section above.
 - ✅ **~~A cleared rift ejected the child~~ — FIXED.** Found by the test suite disagreeing with the
   code: claiming the chest ran `setTimeout(exitDungeon, 1800)`, so the child was yanked out of the
   room 1.8 seconds after opening the treasure, mid-celebration, with no say in it. The room now
   stays open and LEAVE is the child's own choice. **This test had been passing by luck** — under
   heavy load the timer fired late enough to look correct, which is why it was previously written
   off as a flaky test rather than the real bug it was pointing at.
-- ⚠️ **Buildings flickering, dungeon walls passable, no interiors** — not yet reproduced. Unlike
-  the items above these are not one-line fixes; interiors (house/cave/mountain/arena) are new
-  features, not repairs.
+- ✅ **~~Buildings flickering~~ — FOUND AND FIXED.** Arithmetic, not graphics: the world was built
+  to 132 units while the fog drew to 180, so islands popped in and out well inside clear view. See
+  **Pop-in** above.
+- ✅ **~~Dungeon walls passable~~ — FIXED.** The room had no walls at all. See **Solid world**.
+- [ ] **Interiors (house / cave / mountain / arena)** — still missing, and still the honest answer:
+  these are new features, not repairs. The rift is the one interior that exists.
 - ❌ **Real-time co-op with sub-4 ms latency — NOT POSSIBLE AS SPECIFIED.** Under 4 ms round trip
   over the internet is ruled out by the speed of light in fibre (Jakarta–Singapore alone is ~5 ms),
   independent of code quality. Real-time play is worth building (#31); the 4 ms figure is not a

@@ -135,7 +135,10 @@ function makeIsland(x, y, z, r, biome, rand) {
   g.add(inst);
   g.position.set(x, y, z);
   scene.add(g);
-  const isl = { x, z, y, r, group: g, biome, collect: [], slimes: [] };
+  // solids: the props a child can bump into or stand on. Kept per-island in world
+  // coordinates so despawning an island takes its colliders with it, and so the physics
+  // step never has to walk the scene graph.
+  const isl = { x, z, y, r, group: g, biome, collect: [], slimes: [], solids: [] };
   islands.push(isl);
   return isl;
 }
@@ -149,6 +152,9 @@ function makePillar(isl, ox, oz, h) {
   const cap = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.5, 1.9), mat);
   cap.position.set(ox, h + 0.25, oz); cap.castShadow = true;
   isl.group.add(p, cap);
+  // A pillar looks like a platform, so it has to behave like one. Children jumped at these
+  // and dropped straight through, which is most of what "lantai tembus" was describing.
+  isl.solids.push({ x: isl.x + ox, z: isl.z + oz, r: 0.95, top: isl.y + h + 0.5, stand: true });
 }
 
 function makeTree(isl, ox, oz) {
@@ -163,6 +169,56 @@ function makeTree(isl, ox, oz) {
     new THREE.MeshToonMaterial({ color: new THREE.Color(isl.biome.leaf).multiplyScalar(0.88) }));
   leaf2.position.set(ox + 0.6, 3.6, oz - 0.4); leaf2.castShadow = true;
   isl.group.add(trunk, leaf, leaf2);
+  // the trunk stops you; the canopy does not, so a jump still clears the tree
+  isl.solids.push({ x: isl.x + ox, z: isl.z + oz, r: 0.5, top: isl.y + 2.2, stand: false });
+}
+
+// ---------- houses you can actually walk into ----------
+// A building you cannot enter is scenery wearing a costume, and QA said so: "template
+// rumah rumahan yang tidak bisa dimasuki". Every house placed by this function has a door
+// that leads to a real room. The walls are solid, so the only way in is the doorway.
+const doors = [];
+function makeHouse(isl, ox, oz, rot = 0) {
+  const g = new THREE.Group();
+  g.position.set(ox, 0, oz);
+  g.rotation.y = rot;
+  const wallMat = new THREE.MeshToonMaterial({ color: 0xf2e4cf });
+  const roofMat = new THREE.MeshToonMaterial({ color: 0xc4593f });
+  const woodMat = new THREE.MeshToonMaterial({ color: 0x7a4a30 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3, 4.2), wallMat);
+  body.position.y = 1.5; body.castShadow = true; body.receiveShadow = true; g.add(body);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(3.6, 2.1, 4), roofMat);
+  roof.position.y = 4.05; roof.rotation.y = Math.PI / 4; roof.castShadow = true; g.add(roof);
+  // the doorway is a dark recess, not a painted-on rectangle: it reads as somewhere to go
+  const doorway = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.1, 0.3),
+    new THREE.MeshBasicMaterial({ color: 0x2a1d16 }));
+  doorway.position.set(0, 1.05, 2.15); g.add(doorway);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.18), woodMat);
+  frame.position.set(0, 1.2, 2.06); g.add(frame);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
+  lamp.position.set(0.95, 2.4, 2.2); g.add(lamp);
+  lamp.add(glowSprite(0xffd9a0, 1.6));
+  for (const dx of [-1.35, 1.35]) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.15),
+      new THREE.MeshToonMaterial({ color: 0x9ad8ff }));
+    win.position.set(dx, 1.9, 2.12); g.add(win);
+  }
+  isl.group.add(g);
+  // The house body blocks, but the doorway must not, or the child bounces off their own
+  // front door. Two half-walls with a gap between them, rotated with the house.
+  const c = Math.cos(rot), sn = Math.sin(rot);
+  const world = (lx, lz) => [isl.x + ox + lx * c + lz * sn, isl.z + oz - lx * sn + lz * c];
+  for (const [lx, lz] of [[-1.5, 0], [1.5, 0], [0, -1.6]]) {
+    const [wx, wz] = world(lx, lz);
+    isl.solids.push({ x: wx, z: wz, r: 1.5, top: isl.y + 3, stand: false });
+  }
+  const [dxw, dzw] = world(0, 2.4);
+  const door = { x: dxw, z: dzw, y: isl.y, r: 1.5, isl, key: isl.x.toFixed(1) + ':' + ox.toFixed(1) };
+  doors.push(door);
+  isl.doors = isl.doors || [];
+  isl.doors.push(door);
+  return door;
 }
 
 // waterfall ribbon under a group child (local coords)
@@ -380,6 +436,8 @@ function say(text) {
 
 const bursts = [];
 function burst(pos, color, count = 20) {
+  // the Sparkles dial rides here: at 0 a burst is a single puff, at 1.5 it is a shower
+  count = Math.max(1, Math.round(count * fxScale()));
   const geo = new THREE.BufferGeometry();
   const arr = new Float32Array(count * 3), velArr = [];
   for (let i = 0; i < count; i++) {
@@ -394,10 +452,14 @@ function burst(pos, color, count = 20) {
 
 // ---------- settings (persisted) ----------
 const SETTINGS_KEY = 'skyseed_settings_v1';
+const savedSettings = (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { return {}; } })();
 const settings = Object.assign({
   music: 0.5, sfx: 0.8, quality: 'high', sensitivity: 1, invert: false,
-  contrast: false, bigText: false, lang: 'id', tut: {}
-}, (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { return {}; } })());
+  contrast: false, bigText: false, lang: 'id', tut: {},
+  // graphics, each one adjustable on its own; touching any of them flips quality to 'custom'
+  renderScale: 1, shadows: 'soft', viewDist: 180, effects: 1, fpsCap: 0, showFps: false,
+  autoAdjust: true, keys: {}, view: 'tpp'
+}, savedSettings);
 setLang(settings.lang);
 translateDom();
 document.documentElement.lang = settings.lang;
@@ -406,12 +468,76 @@ function applyA11y() {
   document.body.classList.toggle('bigText', !!settings.bigText);
 }
 function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* blocked */ } }
+// Five presets, the way every big game ships them. A preset is just a bundle of the
+// individual dials below it — pick one and the dials move; move a dial and you are on
+// 'custom', which is the only honest label at that point.
+const QUALITY_PRESETS = {
+  potato: { renderScale: 0.6,  shadows: 'off',   viewDist: 90,  effects: 0.25, fpsCap: 30 },
+  low:    { renderScale: 0.8,  shadows: 'off',   viewDist: 120, effects: 0.5,  fpsCap: 0 },
+  medium: { renderScale: 1,    shadows: 'soft',  viewDist: 150, effects: 0.75, fpsCap: 0 },
+  high:   { renderScale: 1,    shadows: 'soft',  viewDist: 180, effects: 1,    fpsCap: 0 },
+  ultra:  { renderScale: 1.35, shadows: 'sharp', viewDist: 300, effects: 1.4,  fpsCap: 0 }
+};
+function applyPreset(name) {
+  const p = QUALITY_PRESETS[name];
+  if (!p) return;
+  Object.assign(settings, p);
+  settings.quality = name;
+}
+// a save written before the dials existed only knows 'high' or 'low'; expand it into the
+// matching preset so the sliders open showing what the child is actually running.
+if (!('renderScale' in savedSettings)) applyPreset(QUALITY_PRESETS[settings.quality] ? settings.quality : 'high');
+// First run on a phone should not open on Pretty and then visibly stumble down to Fast.
+// Guess low and let the child turn it up — a game that starts smooth reads as a better
+// game than one that starts pretty and stutters.
+if (!savedSettings.quality) {
+  const mem = navigator.deviceMemory || 8;
+  const modest = mem <= 4 || (matchMedia('(pointer:coarse)').matches && (navigator.hardwareConcurrency || 8) <= 6);
+  applyPreset(modest ? 'medium' : 'high');
+}
+// how many particles a burst/sparkle should spawn right now — every effect scales off this
+function fxScale() { return settings.effects; }
 function applyQuality() {
-  const low = settings.quality === 'low';
-  renderer.shadowMap.enabled = !low;
-  renderer.setPixelRatio(low ? 1 : Math.min(devicePixelRatio, 2));
-  scene.fog.far = low ? 120 : 180;
-  sun.castShadow = !low;
+  const s = settings;
+  renderer.setPixelRatio(Math.max(0.5, Math.min(devicePixelRatio * s.renderScale, 3)));
+  const shadowsOn = s.shadows !== 'off';
+  renderer.shadowMap.enabled = shadowsOn;
+  renderer.shadowMap.type = s.shadows === 'sharp' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+  sun.castShadow = shadowsOn;
+  const mapSize = s.shadows === 'sharp' ? 2048 : 1024;
+  if (sun.shadow.mapSize.x !== mapSize) {
+    sun.shadow.mapSize.set(mapSize, mapSize);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  }
+  // build the world out to match what the child can see, then keep the fog just inside
+  // that edge so islands fade in rather than pop in
+  const wantGen = streamRadiusFor(s.viewDist);
+  if (wantGen !== GEN_R) {
+    GEN_R = wantGen; KEEP_R = GEN_R + 1;
+    restream();
+  }
+  const far = Math.min(s.viewDist, fogLimit());
+  scene.fog.far = far;
+  scene.fog.near = far * 0.34;
+  // the camera has to out-reach the fog or islands get clipped before they fade
+  camera.far = Math.max(400, far * 1.5);
+  camera.updateProjectionMatrix();
+  document.body.classList.toggle('showFps', !!s.showFps);
+  saveSettings();
+}
+// push the live settings back into the panel, so a preset pick or an auto-adjust shows up
+// on every slider instead of leaving the panel lying about what is running.
+function syncGraphicsUI() {
+  const s = settings, set = (id, v) => { const el = $(id); if (el) el.value = v; };
+  const txt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  set('setQuality', s.quality);
+  set('setScale', s.renderScale); txt('setScaleV', Math.round(s.renderScale * 100) + '%');
+  set('setShadows', s.shadows);
+  set('setView', s.viewDist); txt('setViewV', s.viewDist);
+  set('setFx', s.effects); txt('setFxV', Math.round(s.effects * 100) + '%');
+  set('setFpsCap', String(s.fpsCap));
+  const sf = $('setShowFps'); if (sf) sf.checked = !!s.showFps;
+  const sa = $('setAuto'); if (sa) sa.checked = !!s.autoAdjust;
 }
 
 // ---------- audio: sfx + generative ambient music ----------
@@ -645,7 +771,19 @@ function addSparks(n) {
 }
 
 // ---------- endless world: procedural island chunks ----------
-const CELL = 44, GEN_R = 3, KEEP_R = 4;
+const CELL = 44;
+// How far the world is actually built, in cells. This USED TO BE a fixed 3 (132 units)
+// while the fog drew to 180, so whole islands — trees, pillars and all — blinked into
+// existence a third of the way inside the visible range every time the player crossed a
+// cell boundary. That is the "building masih hilang muncul" report. The streamed radius
+// now follows the view distance, and applyQuality() pulls the fog in behind it so the
+// boundary is always hidden in haze instead of appearing in clear air.
+let GEN_R = 3, KEEP_R = 4;
+function streamRadiusFor(viewDist) {
+  return Math.max(3, Math.min(6, Math.round((viewDist + CELL / 2) / CELL)));
+}
+// the furthest the fog may reach without exposing the edge of the built world
+function fogLimit() { return GEN_R * CELL - 30; }
 const cells = new Map(); // "cx,cz" -> [island,...]
 
 function hash2(a, b) {
@@ -664,6 +802,8 @@ function decorate(isl, rand) {
   if (rand() < 0.7) { const [x, z] = spot(); makeTree(isl, x, z); }
   if (rand() < 0.4) { const [x, z] = spot(); makeTree(isl, x, z); }
   if (rand() < 0.5) { const [x, z] = spot(); makePillar(isl, x, z, 2 + rand() * 3); }
+  // a cottage on the roomier islands, always one you can go inside
+  if (r > 6 && rand() < 0.45) { const [x, z] = spot(); makeHouse(isl, x, z, rand() * Math.PI * 2); }
   if (rand() < 0.35) { const [x, z] = spot(); makeFall(isl, x, z); }
   const seeds = 1 + Math.floor(rand() * 3);
   for (let i = 0; i < seeds; i++) { const [x, z] = spot(); addSeed(isl, x, z); }
@@ -826,10 +966,13 @@ function despawnIsland(isl) {
     s.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) o.material.dispose(); });
     const gi = slimes.indexOf(s); if (gi >= 0) slimes.splice(gi, 1);
   }
+  for (const d of isl.doors || []) { const di = doors.indexOf(d); if (di >= 0) doors.splice(di, 1); }
   const ii = islands.indexOf(isl); if (ii >= 0) islands.splice(ii, 1);
 }
 
 let lastCX = 1e9, lastCZ = 1e9;
+// force the next ensureChunks to do a full pass — used when the streamed radius changes
+function restream() { lastCX = 1e9; lastCZ = 1e9; }
 function ensureChunks(px, pz) {
   const ccx = Math.round(px / CELL), ccz = Math.round(pz / CELL);
   if (ccx === lastCX && ccz === lastCZ) return;
@@ -1936,6 +2079,13 @@ function buildDungeon(plan) {
   floor.position.y = -0.6; floor.receiveShadow = true; g.add(floor);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.5, 8, 40), rimMat);
   rim.rotation.x = Math.PI / 2; g.add(rim);
+  // A wall, because a cave without one is a disc floating in the dark: the child walked
+  // straight off the edge and fell out of the room. That is the "dungeon tembus" report.
+  // Open-topped and rendered from the inside, so the camera still looks down into the room.
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(R + 0.5, R + 0.5, 9, 32, 1, true),
+    new THREE.MeshToonMaterial({ color: tone, side: THREE.BackSide }));
+  wall.position.y = 4.2; g.add(wall);
   // a glowing core in the middle so the room always has a warm focal point
   const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1),
     new THREE.MeshBasicMaterial({ color: 0x9ad8ff }));
@@ -1943,9 +2093,12 @@ function buildDungeon(plan) {
   core.add(new THREE.PointLight(0x9ad8ff, 1.4, 26));
   core.add(glowSprite(0x9ad8ff, 6));
   // a pillar under every crystal, placed by this tier's layout
+  const riftSolids = [];
   for (const [px, py, pz] of riftPositions(plan)) {
     const p = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, py, 8), rimMat);
     p.position.set(px, py / 2, pz); p.castShadow = true; g.add(p);
+    // the pillars are climbable platforms, not scenery you stroll through
+    riftSolids.push({ x: DUNGEON_X + px, z: DUNGEON_Z + pz, r: 0.9, top: py, stand: true });
     const cm = new THREE.Mesh(new THREE.OctahedronGeometry(0.45),
       new THREE.MeshBasicMaterial({ color: 0xa8f0ff }));
     cm.position.set(DUNGEON_X + px, py + 0.9, DUNGEON_Z + pz);
@@ -1956,9 +2109,112 @@ function buildDungeon(plan) {
   scene.add(g);
   dungeonGroup = g;
   // register as ground so the existing collision keeps Miru standing on the floor
+  // `solids` is not optional — the ground and collision code walks it on every island,
+  // and the room used to ship without one.
   dungeonIsland = { x: DUNGEON_X, z: DUNGEON_Z, y: 0, r: R, group: g,
-    biome: BIOMES[6], collect: [], slimes: [] };
+    biome: BIOMES[6], collect: [], slimes: [], solids: riftSolids, wall: R };
   islands.push(dungeonIsland);
+}
+
+// ---------- interiors ----------
+// Built the same way the rift is: a room parked far outside the streamed world, so the
+// outside world never has to be torn down to show an inside. Reusing that machinery means
+// interiors inherit the collision, camera and streaming behaviour that is already tested.
+const HOUSE_X = 200000, HOUSE_Z = 200000;
+let insideHouse = false, houseGroup = null, houseIsland = null, houseReturn = null;
+function buildInterior() {
+  const g = new THREE.Group();
+  g.position.set(HOUSE_X, 0, HOUSE_Z);
+  const R = 5.2;
+  const floorMat = new THREE.MeshToonMaterial({ color: 0x9a7350 });
+  const wallMat = new THREE.MeshToonMaterial({ color: 0xf6ead5, side: THREE.BackSide });
+  const woodMat = new THREE.MeshToonMaterial({ color: 0x7a4a30 });
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(R * 2, 0.6, R * 2), floorMat);
+  floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(R * 2, 6, R * 2), wallMat);
+  walls.position.y = 2.7; g.add(walls);
+  // a hearth, because a room with nothing warm in it reads as a box
+  const hearth = new THREE.Mesh(new THREE.BoxGeometry(2, 1.4, 0.8),
+    new THREE.MeshToonMaterial({ color: 0x8a8f96 }));
+  hearth.position.set(0, 0.7, -R + 0.5); g.add(hearth);
+  const fire = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 0),
+    new THREE.MeshBasicMaterial({ color: 0xffa34a }));
+  fire.position.set(0, 0.9, -R + 0.9); g.add(fire);
+  fire.add(glowSprite(0xffb45c, 3.2));
+  fire.add(new THREE.PointLight(0xffb45c, 1.8, 22));
+  const table = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.16, 14), woodMat);
+  table.position.set(1.6, 0.95, 1.2); table.castShadow = true; g.add(table);
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.95, 8), woodMat);
+  leg.position.set(1.6, 0.47, 1.2); g.add(leg);
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 2.6),
+    new THREE.MeshToonMaterial({ color: 0xd8e6f2 }));
+  bed.position.set(-3.2, 0.25, -0.6); bed.castShadow = true; g.add(bed);
+  const quilt = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.22, 1.5),
+    new THREE.MeshToonMaterial({ color: 0xff9ec6 }));
+  quilt.position.set(-3.2, 0.58, 0.1); g.add(quilt);
+  const rug = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 0.05, 20),
+    new THREE.MeshToonMaterial({ color: 0xa06bf0 }));
+  rug.position.set(0, 0.03, 0.8); g.add(rug);
+  g.add(new THREE.HemisphereLight(0xfff0d8, 0x6a5340, 0.85));
+  scene.add(g);
+  houseGroup = g;
+  houseIsland = {
+    x: HOUSE_X, z: HOUSE_Z, y: 0, r: R, group: g, biome: BIOMES[0],
+    collect: [], slimes: [], doors: [],
+    // the furniture is solid, and `wall` keeps the child inside the room
+    solids: [
+      { x: HOUSE_X + 1.6, z: HOUSE_Z + 1.2, r: 1.15, top: 1.03, stand: true },
+      { x: HOUSE_X - 3.2, z: HOUSE_Z - 0.6, r: 1.1, top: 0.5, stand: true },
+      { x: HOUSE_X, z: HOUSE_Z - R + 0.5, r: 1.1, top: 1.4, stand: false }
+    ],
+    wall: R - 0.3
+  };
+  islands.push(houseIsland);
+}
+function clearInterior() {
+  if (houseGroup) {
+    houseGroup.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material && !o.material.userData.shared) {
+        (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+      }
+    });
+    scene.remove(houseGroup);
+  }
+  houseGroup = null;
+  if (houseIsland) {
+    const ix = islands.indexOf(houseIsland);
+    if (ix >= 0) islands.splice(ix, 1);
+    houseIsland = null;
+  }
+}
+function enterHouse() {
+  if (insideHouse || inDungeon) return false;
+  houseReturn = player.position.clone();
+  insideHouse = true;
+  buildInterior();
+  riding = null;
+  player.position.set(HOUSE_X, 0, HOUSE_Z + 3.4);
+  spawn.set(HOUSE_X, 0, HOUSE_Z + 3.4);
+  camSnap = true;
+  const b = $('houseLeave'); if (b) b.style.display = 'block';
+  chime(640);
+  say(L('You are inside. Make yourself at home!'));
+  return true;
+}
+function leaveHouse() {
+  if (!insideHouse) return;
+  insideHouse = false;
+  clearInterior();
+  const back = houseReturn || new THREE.Vector3(0, 0, 3);
+  // step out in FRONT of the door, never on top of it, or you walk straight back in
+  player.position.copy(back).add(new THREE.Vector3(0, 0.5, 0));
+  spawn.copy(back);
+  camSnap = true;
+  restream();
+  ensureChunks(player.position.x, player.position.z);
+  const b = $('houseLeave'); if (b) b.style.display = 'none';
+  say(L('Back outside.'));
 }
 
 function spawnDungeonChest() {
@@ -2154,8 +2410,90 @@ window.__sky = {
     camera: [camera.position.x, camera.position.y, camera.position.z].map(n => +n.toFixed(2)),
     roomAt: dungeonGroup ? [dungeonGroup.position.x, dungeonGroup.position.y, dungeonGroup.position.z] : null,
     crystals: collect.filter(c => c.kind === 'dcrystal').length,
-    ground: groundHeight(player.position.x, player.position.z)
+    ground: groundHeight(player.position.x, player.position.z),
+    view: settings.view,
+    insideHouse,
+    avatarVisible: player.visible,
+    padSeen
   }),
+  // what the renderer is actually doing right now, so a graphics setting can be proved
+  // to have landed instead of merely being stored
+  gfx: () => ({
+    quality: settings.quality,
+    presets: Object.keys(QUALITY_PRESETS),
+    renderScale: settings.renderScale,
+    pixelRatio: +renderer.getPixelRatio().toFixed(3),
+    shadows: settings.shadows,
+    shadowsOn: renderer.shadowMap.enabled && sun.castShadow,
+    shadowMap: sun.shadow.mapSize.x,
+    viewDist: settings.viewDist,
+    fogFar: scene.fog.far,
+    // how far the world is actually built. The fog must never reach past this, or islands
+    // appear out of clear air instead of fading in.
+    streamEdge: fogLimit(),
+    genR: GEN_R,
+    cameraFar: camera.far,
+    effects: settings.effects,
+    fpsCap: settings.fpsCap,
+    fps: +fpsNow.toFixed(1),
+    showFps: settings.showFps,
+    meterText: ($('fpsMeter') || {}).textContent,
+    autoAdjust: settings.autoAdjust
+  }),
+  // interiors: how many doors are loaded, and a way to reach one without hunting
+  doors: () => doors.length,
+  insideHouse: () => insideHouse,
+  toDoor: () => {
+    if (!doors.length) return null;
+    const d = doors[0];
+    player.position.set(d.x, d.y + 0.05, d.z);
+    vel.set(0, 0, 0); camSnap = true;
+    return { x: +d.x.toFixed(2), z: +d.z.toFixed(2), y: d.y };
+  },
+  enterHouse: () => enterHouse(),
+  leaveHouse: () => leaveHouse(),
+
+  // the live binding table, so a test can prove a rebind reached the movement code
+  binds: () => Object.assign({}, binds),
+  // solid props: how many there are near the child, and a switch to turn them off so a
+  // test can show the before and the after rather than asserting against itself
+  solids: () => islands.reduce((n, i) => n + i.solids.length, 0),
+  nearestSolid: () => {
+    let best = null;
+    for (const isl of islands) for (const s of isl.solids) {
+      const d = Math.hypot(player.position.x - s.x, player.position.z - s.z);
+      if (!best || d < best.d) best = { d: +d.toFixed(3), x: s.x, z: s.z, r: s.r, top: +s.top.toFixed(2), stand: s.stand };
+    }
+    return best;
+  },
+  // put the child on flat open ground a set distance from a chosen prop, facing it
+  atSolid: (want = 'stand', back = 3) => {
+    for (const isl of islands) for (const s of isl.solids) {
+      if (want === 'stand' && !s.stand) continue;
+      if (want === 'block' && s.stand) continue;
+      // stand on the +z side and look down -z, because forward is away from the camera:
+      // with camYaw 0 the movement basis sends W toward -z, straight at the prop
+      player.position.set(s.x, isl.y + 0.05, s.z + s.r + back);
+      vel.set(0, 0, 0); camYaw = 0; camPitch = 0.32; camSnap = true;
+      return { x: s.x, z: s.z, r: s.r, top: +s.top.toFixed(2), islandY: isl.y, stand: !!s.stand };
+    }
+    return null;
+  },
+  setNoclip: v => { noclip = !!v; return noclip; },
+  // drop the child at a chosen spot with no momentum, for falling tests.
+  // height comes last because that is how you say it: "over there, this high up".
+  dropAt: (x, z, height) => {
+    player.position.set(x, height, z);
+    vel.set(0, 0, 0); camSnap = true;
+    return [player.position.x, player.position.y, player.position.z];
+  },
+  setGfx: (id, value) => {
+    const el = $(id);
+    if (!el) return false;
+    if (el.type === 'checkbox') { el.checked = !!value; el.dispatchEvent(new Event('change', { bubbles: true })); }
+    else { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); }
+    return true;
+  },
   // graphics triage: hide a category to find out what an on-screen artefact actually is
   hide: what => {
     if (what === 'clouds') clouds.forEach(c => (c.visible = false));
@@ -2220,20 +2558,127 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 // ---------- input ----------
+// Every key the game reads goes through this table, so a child can move any of them and
+// nothing anywhere else has to know. The arrow keys and right Shift stay wired underneath
+// as permanent alternates — rebinding W should not cost you the arrow keys.
+const DEFAULT_KEYS = {
+  forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',
+  jump: 'Space', sprint: 'ShiftLeft', punch: 'KeyF', interact: 'KeyE',
+  pet: 'KeyP', ride: 'KeyR', journal: 'KeyJ', wardrobe: 'KeyK',
+  buddies: 'KeyN', map: 'KeyM', shop: 'KeyT', camLeft: 'KeyQ', view: 'KeyV'
+};
+const ALT_KEYS = {
+  forward: ['ArrowUp'], back: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
+  sprint: ['ShiftRight']
+};
+const binds = Object.assign({}, DEFAULT_KEYS, settings.keys || {});
 const keys = {};
+// is the key for this action down right now?
+function held(action) {
+  if (keys[binds[action]]) return true;
+  const alts = ALT_KEYS[action];
+  if (alts) for (const k of alts) if (keys[k]) return true;
+  return false;
+}
+// which action does this physical key run? built fresh whenever a binding changes
+let keyToAction = {};
+function rebuildKeyMap() {
+  keyToAction = {};
+  for (const a in binds) keyToAction[binds[a]] = a;
+  for (const a in ALT_KEYS) for (const k of ALT_KEYS[a]) if (!keyToAction[k]) keyToAction[k] = a;
+}
+rebuildKeyMap();
+function setBind(action, code) {
+  if (!(action in DEFAULT_KEYS) || !code) return false;
+  // one key, one job: whatever held this code before falls back to nothing rather than
+  // silently firing two actions at once
+  for (const a in binds) if (a !== action && binds[a] === code) binds[a] = '';
+  binds[action] = code;
+  settings.keys = Object.assign({}, binds);
+  rebuildKeyMap(); saveSettings(); renderBinds();
+  return true;
+}
+function resetBinds() {
+  Object.assign(binds, DEFAULT_KEYS);
+  settings.keys = {};
+  rebuildKeyMap(); saveSettings(); renderBinds();
+}
+// the one-shot actions, kept apart from the held ones above
+const TAP_ACTIONS = {
+  jump: () => { jumpPressed = true; },
+  punch: () => { punchPressed = true; },
+  interact: () => { interactPressed = true; },
+  pet: () => { petPressed = true; },
+  ride: () => { if (!buildMode) toggleRide(); },
+  journal: () => { const j = $('journal'); if (j && j.classList.contains('on')) closeJournal(); else openJournal(); },
+  wardrobe: () => { const w = $('wardrobe'); if (w && w.classList.contains('on')) closeWardrobe(); else openWardrobe(); },
+  buddies: () => { const bp = $('buddyPanel'); if (bp && bp.classList.contains('on')) closeBuddyPanel(); else openBuddyPanel(); },
+  map: () => { const mp = $('mapWrap'); if (mp) mp.classList.toggle('big'); },
+  view: () => setViewMode(settings.view === 'fpp' ? 'tpp' : 'fpp'),
+  shop: () => { const sh = $('shop'); if (sh && sh.classList.contains('on')) closeShop(); else openShop(); }
+};
+// ---- the rebinding panel ----
+const BIND_LABELS = {
+  forward: 'Walk forward', back: 'Walk back', left: 'Step left', right: 'Step right',
+  jump: 'Jump', sprint: 'Run', punch: 'Pow', interact: 'Talk', pet: 'Pet buddy',
+  ride: 'Ride buddy', journal: 'Journal', wardrobe: 'Wardrobe', buddies: 'Buddies',
+  map: 'Map', shop: 'Shop', camLeft: 'Turn camera', view: 'Eyes or camera'
+};
+// KeyW reads as gibberish to a seven-year-old; show the letter on the cap instead
+function keyLabel(code) {
+  if (!code) return L('none');
+  if (code === 'Space') return L('Space');
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Arrow')) return { Up: '↑', Down: '↓', Left: '←', Right: '→' }[code.slice(5)] || code;
+  if (code === 'ShiftLeft') return L('Shift');
+  if (code === 'ShiftRight') return L('Shift') + ' R';
+  return code;
+}
+let awaitingBind = null;
+function endBindCapture() {
+  awaitingBind = null;
+  renderBinds();
+}
+function renderBinds() {
+  const host = $('bindList');
+  if (!host) return;
+  host.textContent = '';
+  for (const action in BIND_LABELS) {
+    const row = document.createElement('div');
+    row.className = 'bindRow';
+    const name = document.createElement('span');
+    name.textContent = L(BIND_LABELS[action]);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'bindKey' + (awaitingBind === action ? ' listening' : '') + (binds[action] ? '' : ' clash');
+    btn.id = 'bind_' + action;
+    btn.textContent = awaitingBind === action ? L('Press a key...') : keyLabel(binds[action]);
+    btn.setAttribute('aria-label', L(BIND_LABELS[action]) + ': ' + keyLabel(binds[action]));
+    btn.addEventListener('click', () => {
+      awaitingBind = awaitingBind === action ? null : action;
+      renderBinds();
+      const live = $('bind_' + action);
+      if (live && awaitingBind) live.focus();
+    });
+    row.append(name, btn);
+    host.appendChild(row);
+  }
+}
+const bindResetBtn = $('bindReset');
+if (bindResetBtn) bindResetBtn.addEventListener('click', () => { awaitingBind = null; resetBinds(); });
+
 let jumpPressed = false, punchPressed = false;
 addEventListener('keydown', e => {
+  // while the panel is waiting for a new binding, the key belongs to the panel, not the game
+  if (awaitingBind) { e.preventDefault(); setBind(awaitingBind, e.code); endBindCapture(); return; }
   keys[e.code] = true;
-  if (e.code === 'Space') { jumpPressed = true; e.preventDefault(); }
-  if (e.code === 'KeyF') punchPressed = true;
-  if (e.code === 'KeyE') interactPressed = true;
-  if (e.code === 'KeyP') petPressed = true;
-  if (e.code === 'KeyR' && !buildMode) toggleRide();
-  if (e.code === 'KeyJ') { const j = $('journal'); if (j && j.classList.contains('on')) closeJournal(); else openJournal(); }
-  if (e.code === 'KeyK') { const w = $('wardrobe'); if (w && w.classList.contains('on')) closeWardrobe(); else openWardrobe(); }
-  if (e.code === 'KeyN') { const bp = $('buddyPanel'); if (bp && bp.classList.contains('on')) closeBuddyPanel(); else openBuddyPanel(); }
-  if (e.code === 'KeyM') { const mp = $('mapWrap'); if (mp) mp.classList.toggle('big'); }
-  if (e.code === 'KeyT') { const sh = $('shop'); if (sh && sh.classList.contains('on')) closeShop(); else openShop(); }
+  if (e.repeat) return;
+  const action = keyToAction[e.code];
+  if (!action) return;
+  if (action === 'jump') e.preventDefault();
+  const tap = TAP_ACTIONS[action];
+  if (tap) tap();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
@@ -2331,6 +2776,7 @@ if (stickEl) {
   const release = e => {
     if (sid !== null && e.pointerId !== sid) return;
     sid = null; stickVec.x = stickVec.y = 0; centreKnob();
+    stickEl.classList.remove('pressed'); knob.classList.remove('pressed');
   };
   stickEl.addEventListener('pointerdown', e => {
     if (sid !== null) return;
@@ -2338,6 +2784,9 @@ if (stickEl) {
     sid = e.pointerId;
     // capture so a thumb that slides off the circle keeps steering instead of freezing
     try { stickEl.setPointerCapture(sid); } catch (_) {}
+    // the ring brightens and the knob grows, so the stick looks grabbed while it is held
+    stickEl.classList.add('pressed'); knob.classList.add('pressed');
+    buzz(8);
     aim(e);
   });
   stickEl.addEventListener('pointermove', e => { if (e.pointerId === sid) aim(e); });
@@ -2348,12 +2797,113 @@ if (stickEl) {
   addEventListener('resize', centreKnob);
   centreKnob();
 }
+// A press has to be *felt*, not just registered. QA's complaint was that the buttons never
+// moved, so a child could not tell a working tap from a dead one. Every press now shrinks
+// the button, pulses a ring out of it, and buzzes the phone for 12 ms.
+function buzz(ms) {
+  // some browsers throw on vibrate inside a non-user gesture; never let that kill a jump
+  try { if (navigator.vibrate && !matchMedia('(prefers-reduced-motion:reduce)').matches) navigator.vibrate(ms); } catch (_) {}
+}
+function flash(el, ms = 130) {
+  if (!el) return;
+  el.classList.remove('pressed');
+  // reading offsetWidth restarts the ring animation on a rapid double tap
+  void el.offsetWidth;
+  el.classList.add('pressed');
+  clearTimeout(el._flashT);
+  el._flashT = setTimeout(() => el.classList.remove('pressed'), ms);
+}
+// ---------- gamepad ----------
+// A Windows controller had no support here at all, which is why QA could not test one.
+// The left stick reports the same way the on-screen stick does -- x right, y DOWN -- so it
+// feeds the same two numbers into the same movement line, and cannot end up inverted
+// relative to the touch controls without both being wrong together.
+const padVec = { x: 0, y: 0 };
+let padSprint = false, padSeen = false;
+const padPrev = {};
+const DEADZONE = 0.18;
+function padAxis(v) {
+  if (!v || Math.abs(v) < DEADZONE) return 0;
+  // rescale past the dead zone so the stick starts at zero rather than jumping to 0.18
+  return (v - Math.sign(v) * DEADZONE) / (1 - DEADZONE);
+}
+// fire once per press, not once per frame
+function padTap(pad, index) {
+  const down = !!(pad.buttons[index] && pad.buttons[index].pressed);
+  const was = padPrev[index];
+  padPrev[index] = down;
+  return down && !was;
+}
+function pollGamepad(dt) {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let pad = null;
+  for (const g of pads) if (g && g.connected) { pad = g; break; }
+  if (!pad) {
+    if (padSeen) { padSeen = false; padVec.x = padVec.y = 0; padSprint = false; }
+    return;
+  }
+  if (!padSeen) { padSeen = true; say(L('Controller connected!')); chime(720); }
+  padVec.x = padAxis(pad.axes[0]);
+  padVec.y = padAxis(pad.axes[1]);
+  const sens = settings.sensitivity;
+  camYaw -= padAxis(pad.axes[2]) * dt * 2.8 * sens;
+  camPitch = Math.min(1.15, Math.max(-0.35,
+    camPitch + padAxis(pad.axes[3]) * dt * 2.0 * sens * (settings.invert ? -1 : 1)));
+  const b = pad.buttons;
+  padSprint = !!((b[10] && b[10].pressed) || (b[6] && b[6].value > 0.5) || (b[7] && b[7].value > 0.5));
+  // the standard layout every console teaches: bottom face jumps, left face hits
+  if (padTap(pad, 0)) jumpPressed = true;
+  if (padTap(pad, 2)) punchPressed = true;
+  if (padTap(pad, 1)) interactPressed = true;
+  if (padTap(pad, 3)) petPressed = true;
+  if (padTap(pad, 4)) TAP_ACTIONS.journal();
+  if (padTap(pad, 5)) TAP_ACTIONS.map();
+  if (padTap(pad, 9)) setPaused(!paused);
+  if (padTap(pad, 8)) setViewMode(settings.view === 'fpp' ? 'tpp' : 'fpp');
+}
+
+// ---------- first person / third person ----------
+// The avatar is hidden in first person rather than part-hidden: a VRM head scaled away
+// leaves a neck stump in view, and a child should see the world, not the inside of a face.
+function setViewMode(mode) {
+  settings.view = mode === 'fpp' ? 'fpp' : 'tpp';
+  saveSettings();
+  player.visible = settings.view === 'tpp';
+  camSnap = true;
+  const btn = $('viewBtn');
+  if (btn) btn.textContent = settings.view === 'fpp' ? L('1st') : L('3rd');
+  say(settings.view === 'fpp' ? L('First person. Look around!') : L('Back to third person.'));
+}
+
 // pointerdown fires for mouse, touch and pen; the click fallback (detail 0) is the
 // keyboard path, so Tab + Enter on the buttons works for a child using a keyboard.
 function pressBtn(el, fn) {
   if (!el) return;
-  el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
-  el.addEventListener('click', e => { if (e.detail === 0) fn(); });
+  // a real button is focusable and announces itself; these started life as bare divs
+  if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+  if (!el.getAttribute('role')) el.setAttribute('role', 'button');
+  if (!el.querySelector('.ring')) {
+    const ring = document.createElement('span');
+    ring.className = 'ring';
+    el.appendChild(ring);
+  }
+  const fire = () => { flash(el); buzz(12); fn(); };
+  el.addEventListener('pointerdown', e => { e.preventDefault(); fire(); });
+  el.addEventListener('click', e => { if (e.detail === 0) fire(); });
+  el.addEventListener('keydown', e => {
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); fire(); }
+  });
+}
+// Every HUD button gets the same acknowledgement. These already carry their own click
+// handlers, so this only adds the feel — press, shrink, buzz — without touching behaviour.
+for (const id of ['pauseBtn', 'journalBtn', 'wardrobeBtn', 'photoBtn', 'dungeonBtn', 'buildBtn', 'careBtn', 'rideBtn', 'viewBtn']) {
+  const el = $(id);
+  if (!el) continue;
+  el.addEventListener('pointerdown', () => {
+    el.classList.add('hudTap'); buzz(10);
+    clearTimeout(el._tapT);
+    el._tapT = setTimeout(() => el.classList.remove('hudTap'), 130);
+  });
 }
 pressBtn($('jumpBtn'), () => { jumpPressed = true; });
 const punchBtn = $('punchBtn');
@@ -2362,6 +2912,8 @@ pressBtn(punchBtn, () => { punchPressed = true; });
 // ---------- physics + loop ----------
 const vel = new THREE.Vector3();
 let onGround = false, jumps = 0, running = false;
+// only the test harness sets this, to show the difference solid props actually make
+let noclip = false;
 let punchTime = -1; // >=0 while punch anim plays
 let trailTick = 0, bondT = 0;
 let coyoteT = 0, jumpBufT = 0, footT = 0, wasAirborne = false, airTime = 0;
@@ -2369,13 +2921,57 @@ const skyTmp = new THREE.Color(), fogTmp = new THREE.Color();
 const spawn = new THREE.Vector3(0, 0, 3);
 // WALK/SPRINT/JUMP/GRAV/MAXJUMPS/GLIDE/MAGNET live in the progression block above
 
-function groundHeight(x, z) {
+// How wide the child is, for bumping into things. Generous rather than exact: a collider
+// that hugs the mesh reads as "I got stuck on nothing" every time a shoulder clips a trunk.
+const BODY_R = 0.34;
+
+// The floor under a point. Islands are flat discs; a pillar cap is a small disc on top of
+// one. `feet` is where the child currently is: a platform only counts as floor when they
+// are at or above it, otherwise standing beside a pillar would teleport them onto it.
+// The default is deliberately -Infinity: existing callers (pets, slimes, the flight
+// ceiling) want the island floor and nothing else. Only the player passes real feet and
+// so is the only thing that can stand on a pillar.
+function groundHeight(x, z, feet = -Infinity) {
   let best = -Infinity;
   for (const isl of islands) {
-    const d = Math.hypot(x - isl.x, z - isl.z);
-    if (d < isl.r) best = Math.max(best, isl.y);
+    if (Math.hypot(x - isl.x, z - isl.z) < isl.r) best = Math.max(best, isl.y);
+    for (const s of isl.solids) {
+      if (!s.stand || s.top <= best) continue;
+      // slightly inside the cap, so you cannot stand on the very lip of thin air
+      if (Math.hypot(x - s.x, z - s.z) > s.r - 0.1) continue;
+      if (feet >= s.top - 0.35) best = s.top;
+    }
   }
   return best;
+}
+
+// Push the child out of anything solid. Circle against circle, resolved along the shortest
+// way out, so walking into a tree slides you around it instead of stopping you dead.
+// Props were pure decoration before this — QA filed that as "properti palsu", and they
+// were right: you could stroll straight through every trunk and pillar in the world.
+function pushOutOfSolids(pos, feet) {
+  // `feet` is where the child stood at the start of the frame -- see the call site
+  // a walled room (the rift) keeps you inside it: the wall is the boundary of the island
+  for (const isl of islands) {
+    if (!isl.wall) continue;
+    const dx = pos.x - isl.x, dz = pos.z - isl.z;
+    const d = Math.hypot(dx, dz), limit = isl.wall - BODY_R;
+    if (d > limit && d > 1e-4) { pos.x = isl.x + dx / d * limit; pos.z = isl.z + dz / d * limit; }
+  }
+  for (const isl of islands) {
+    if (Math.hypot(pos.x - isl.x, pos.z - isl.z) > isl.r + 4) continue;
+    for (const s of isl.solids) {
+      // above it? then it is a floor, not a wall
+      if (feet >= s.top - 0.2) continue;
+      const dx = pos.x - s.x, dz = pos.z - s.z;
+      const need = s.r + BODY_R;
+      let d = Math.hypot(dx, dz);
+      if (d >= need) continue;
+      if (d < 1e-4) { pos.x += need; continue; } // dead centre: shove it somewhere definite
+      pos.x = s.x + dx / d * need;
+      pos.z = s.z + dz / d * need;
+    }
+  }
 }
 
 let started = false;
@@ -2416,8 +3012,24 @@ function bindSetting(id, apply) {
   if (mv) mv.value = settings.music;
   const sv = bindSetting('setSfx', el => { settings.sfx = +el.value; setVolumes(); });
   if (sv) sv.value = settings.sfx;
-  const qv = bindSetting('setQuality', el => { settings.quality = el.value; govApplied = false; applyQuality(); });
-  if (qv) qv.value = settings.quality;
+  bindSetting('setQuality', el => {
+    if (el.value !== 'custom') applyPreset(el.value); else settings.quality = 'custom';
+    govSteps = 0; applyQuality(); syncGraphicsUI();
+  });
+  // any individual dial moving means the preset name no longer describes what you see
+  const dial = (id, read) => bindSetting(id, el => { read(el); settings.quality = 'custom'; applyQuality(); syncGraphicsUI(); });
+  dial('setScale', el => { settings.renderScale = +el.value; });
+  dial('setShadows', el => { settings.shadows = el.value; });
+  dial('setView', el => { settings.viewDist = +el.value; });
+  dial('setFx', el => { settings.effects = +el.value; });
+  dial('setFpsCap', el => { settings.fpsCap = +el.value; });
+  const sfps = $('setShowFps');
+  if (sfps) sfps.addEventListener('change', () => {
+    settings.showFps = sfps.checked; saveSettings();
+    document.body.classList.toggle('showFps', settings.showFps);
+  });
+  const sauto = $('setAuto');
+  if (sauto) sauto.addEventListener('change', () => { settings.autoAdjust = sauto.checked; govSteps = 0; saveSettings(); });
   const sens = bindSetting('setSens', el => { settings.sensitivity = +el.value; });
   if (sens) sens.value = settings.sensitivity;
   const inv = $('setInvert');
@@ -2439,12 +3051,23 @@ function bindSetting(id, apply) {
   }
 }
 applyA11y();
+syncGraphicsUI();
+applyQuality();
+renderBinds();
+setViewMode(settings.view);
+const viewBtn = $('viewBtn');
+if (viewBtn) viewBtn.addEventListener('click', () => setViewMode(settings.view === 'fpp' ? 'tpp' : 'fpp'));
 
 // ---------- photo mode: frame a shot, snap it, save it (a sharing hook for siblings) ----------
 function setPhotoMode(on) {
   document.body.classList.toggle('photo', on);
   if (on) tip('photo', L('Move the camera to frame your shot, then tap Snap!'));
 }
+const houseEnterBtn = $('houseEnter');
+if (houseEnterBtn) pressBtn(houseEnterBtn, () => enterHouse());
+const houseLeaveBtn = $('houseLeave');
+if (houseLeaveBtn) pressBtn(houseLeaveBtn, () => leaveHouse());
+
 const photoBtn = $('photoBtn');
 if (photoBtn) photoBtn.addEventListener('click', () => setPhotoMode(!document.body.classList.contains('photo')));
 const photoExit = $('photoExit');
@@ -2495,32 +3118,50 @@ function doPunch(t) {
   }
 }
 
-// FPS governor: if the frame rate stays low, quietly drop expensive features
-let fpsAcc = 0, fpsN = 0, govApplied = false;
-function governFps(dt) {
-  if (govApplied || settings.quality === 'low') return;
-  fpsAcc += dt; fpsN++;
-  if (fpsAcc >= 2) {
-    const fps = fpsN / fpsAcc;
-    fpsAcc = 0; fpsN = 0;
-    if (fps < 28) {
-      govApplied = true;
-      renderer.setPixelRatio(1);
-      renderer.shadowMap.enabled = false;
-      sun.castShadow = false;
-      say(L('Smoothing things out for your device!'));
-    }
+// FPS governor: if the frame rate stays low, step down one preset at a time rather than
+// dropping straight to the floor, and only while the child has left auto-adjust on.
+const PRESET_LADDER = ['ultra', 'high', 'medium', 'low', 'potato'];
+// Measured on the wall clock, never on the frame delta: the delta is clamped to 50 ms so
+// a stall cannot fling the player across the map, and counting frames against a clamped
+// delta reports a comfortable 20 FPS on a device that is really managing one. That lie is
+// why the old governor never rescued anybody -- it was watching a number that could not fall.
+let fpsMark = 0, fpsN = 0, fpsNow = 0, govSteps = 0;
+function governFps() {
+  const now = performance.now();
+  if (!fpsMark) { fpsMark = now; return; }
+  fpsN++;
+  if (now - fpsMark < 1000) return;
+  fpsNow = fpsN * 1000 / (now - fpsMark);
+  fpsMark = now; fpsN = 0;
+  const fpsEl = $('fpsMeter');
+  if (fpsEl && settings.showFps) fpsEl.textContent = Math.round(fpsNow) + ' FPS';
+  if (!settings.autoAdjust || govSteps >= 2) return;
+  const at = PRESET_LADDER.indexOf(settings.quality);
+  if (fpsNow < 28 && at >= 0 && at < PRESET_LADDER.length - 1) {
+    govSteps++;
+    applyPreset(PRESET_LADDER[at + 1]);
+    applyQuality(); saveSettings(); syncGraphicsUI();
+    say(L('Smoothing things out for your device!'));
   }
 }
 
 let paused = false;
 
+let capCarry = 0;
 function animate() {
   requestAnimationFrame(animate);
-  const rawDt = Math.min(clock.getDelta(), 0.05);
+  // an FPS cap is a battery setting on a phone, not a throttle: skip the frame but keep
+  // the clock's delta so the world moves at the same speed either way.
+  if (settings.fpsCap) {
+    capCarry += clock.getDelta();
+    if (capCarry < 1 / settings.fpsCap - 0.001) return;
+  }
+  const rawDt = Math.min(settings.fpsCap ? capCarry : clock.getDelta(), 0.05);
+  capCarry = 0;
   const dt = paused ? 0 : rawDt;
   const t = clock.elapsedTime;
-  governFps(rawDt);
+  governFps();
+  if (started) pollGamepad(rawDt);
 
   for (const c of clouds) {
     c.position.x += c.userData.v * dt;
@@ -2551,7 +3192,7 @@ function animate() {
   }
 
   // keyboard camera rotate fallback (Q/E) for kids without a mouse
-  if (keys.KeyQ) camYaw += dt * 2.2;
+  if (held('camLeft')) camYaw += dt * 2.2;
 
   if (started) {
     // Camera-relative movement. `iz` is FORWARD-positive: pushing W, or the stick up,
@@ -2559,15 +3200,17 @@ function animate() {
     // while the vectors below were written forward-positive, so W drove the child
     // backwards and the stick answered every thumb with the opposite direction.
     // Screen-down on the stick (stickVec.y > 0) means "come back", hence the minus.
-    let ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + stickVec.x;
-    let iz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - stickVec.y;
+    // the pad's left stick joins the same line as the on-screen stick, with the same sign,
+    // so the two can never disagree about which way is forward
+    let ix = (held('right') ? 1 : 0) - (held('left') ? 1 : 0) + stickVec.x + padVec.x;
+    let iz = (held('forward') ? 1 : 0) - (held('back') ? 1 : 0) - stickVec.y - padVec.y;
     const len = Math.hypot(ix, iz);
     if (len > 1) { ix /= len; iz /= len; }
     running = len > 0.05;
 
     // riding is faster, and a winged buddy is faster still
     const rideBoost = riding ? (riding.wings ? 1.85 : 1.5) : 1;
-    const speed = ((keys.ShiftLeft || keys.ShiftRight) ? SPRINT : WALK) * rideBoost;
+    const speed = ((held('sprint') || padSprint) ? SPRINT : WALK) * rideBoost;
     const sy = Math.sin(camYaw), cy = Math.cos(camYaw);
     vel.x = (ix * cy - iz * sy) * speed;
     vel.z = (-ix * sy - iz * cy) * speed;
@@ -2594,7 +3237,7 @@ function animate() {
     punchPressed = false;
 
     vel.y += GRAV * dt;
-    if (riding && riding.wings && keys.Space) {
+    if (riding && riding.wings && held('jump')) {
       // winged buddy: hold jump to fly. A soft ceiling eases the climb to nothing near the top
       // so a child drifts to a gentle hover instead of vanishing into empty sky.
       const gh = groundHeight(player.position.x, player.position.z);
@@ -2602,7 +3245,7 @@ function animate() {
       const room = Math.max(0, 1 - (player.position.y - floor) / 34);
       vel.y = Math.min(vel.y + 46 * dt * room, 8.5 * Math.max(0.12, room));
       if (Math.random() < 0.25) burst(riding.g.position.clone(), 0xffffff, 2);
-    } else if (vel.y < 0 && keys.Space) {
+    } else if (vel.y < 0 && held('jump')) {
       vel.y = Math.max(vel.y, riding ? GLIDE * 0.55 : GLIDE); // a mount always softens the fall
     }
 
@@ -2610,9 +3253,18 @@ function animate() {
     const wantLift = riding ? 0.72 + (riding.level - 1) * 0.05 : 0;
     rideLift += (wantLift - rideLift) * Math.min(1, dt * 8);
 
+    // where the feet were before this step — the floor test below sweeps between the two,
+    // so a fast fall cannot pass straight through a platform in a single frame
+    const prevY = player.position.y;
     player.position.x += vel.x * dt;
     player.position.z += vel.z * dt;
     player.position.y += vel.y * dt;
+    // `prevY`, not the lowest point of the frame. Whether a platform is a wall or a floor
+    // is decided by where the feet were when the frame BEGAN: if they started above the
+    // cap, this is a landing. Using the lower of the two meant that on the exact frame a
+    // child touched down, they were judged to be below the cap and shoved sideways off it
+    // -- which looked precisely like falling through a solid pillar.
+    if (!noclip) pushOutOfSolids(player.position, prevY);
 
     // stream new islands in / far ones out, and greet new biomes.
     // inside a dungeon the world is frozen: the room sits far outside the streamed
@@ -2643,6 +3295,19 @@ function animate() {
     sunSprite.material.opacity = 0.9 * dayF;
     sunGlow.material.opacity = 0.28 * dayF;
 
+    // standing in a doorway: prompt, and let the same TALK button take you in, so a child
+    // on a phone never needs a keyboard to get through a door
+    if (!inDungeon && !insideHouse) {
+      let atDoor = null;
+      for (const d of doors) {
+        if (Math.hypot(player.position.x - d.x, player.position.z - d.z) < d.r) { atDoor = d; break; }
+      }
+      const hb = $('houseEnter');
+      if (hb) hb.style.display = atDoor ? 'block' : 'none';
+      if (atDoor && interactPressed) { interactPressed = false; enterHouse(); }
+      if (atDoor) tip('door', L('Tap ENTER to go inside the house!'));
+    }
+
     // wonder discovery: first visit to a Great Tree island
     for (const isl of islands) {
       if (!isl.wonder || isl.found) continue;
@@ -2663,10 +3328,21 @@ function animate() {
       if (trailTick <= 0) { burst(player.position.clone().add(new THREE.Vector3(0, 0.3, 0)), 0xfff2c0, 4); trailTick = 0.12; }
     }
 
-    const gh = groundHeight(player.position.x, player.position.z);
-    if (gh > -Infinity && player.position.y <= gh && vel.y <= 0) {
+    // Sweep, do not sample. Asking only "am I below the floor right now" lets a fast fall
+    // step over a thin platform between two frames -- the child lands on nothing and keeps
+    // going, which is exactly the floor they reported falling through. Testing the span
+    // the feet actually travelled catches it.
+    const gh = groundHeight(player.position.x, player.position.z, Math.max(prevY, player.position.y));
+    if (gh > -Infinity && player.position.y <= gh && prevY >= gh - 0.001 && vel.y <= 0) {
       player.position.y = gh; vel.y = 0; onGround = true; jumps = 0;
       spawn.set(player.position.x, gh, player.position.z);
+    } else if (gh > -Infinity && player.position.y <= gh && vel.y <= 0) {
+      // already below it when the frame began: settle onto the island floor, not the cap
+      const floor = groundHeight(player.position.x, player.position.z, -Infinity);
+      if (floor > -Infinity && player.position.y <= floor) {
+        player.position.y = floor; vel.y = 0; onGround = true; jumps = 0;
+        spawn.set(player.position.x, floor, player.position.z);
+      } else onGround = false;
     } else {
       onGround = false;
     }
@@ -2685,7 +3361,7 @@ function animate() {
       if (footT <= 0) {
         thud(650, 0.045);
         burst(player.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0xcfc5b8, 3);
-        footT = (keys.ShiftLeft || keys.ShiftRight) ? 0.22 : 0.3;
+        footT = (held('sprint') || padSprint) ? 0.22 : 0.3;
       }
     } else footT = 0;
 
@@ -2925,7 +3601,21 @@ function animate() {
   }
 
   // orbit camera around player using yaw/pitch/distance
-  if (started) {
+  if (started && settings.view === 'fpp') {
+    // First person. In third person the camera sits at +(sin yaw, cos yaw) behind the
+    // child and looks back at them, so the direction they walk is exactly -(sin, cos) --
+    // the same vector the movement code already uses. First person just puts the camera
+    // at eye height and points it down that same vector, so forward stays forward and the
+    // two modes can never disagree about which way the child is facing.
+    const cp = Math.cos(camPitch);
+    const eye = new THREE.Vector3(player.position.x, player.position.y + 1.5, player.position.z);
+    camera.position.copy(eye);
+    camera.lookAt(
+      eye.x - Math.sin(camYaw) * cp,
+      eye.y - Math.sin(camPitch),
+      eye.z - Math.cos(camYaw) * cp
+    );
+  } else if (started) {
     const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
     const ox = Math.sin(camYaw) * cp * camDist;
     const oz = Math.cos(camYaw) * cp * camDist;
@@ -2968,10 +3658,11 @@ function animate() {
     // instantly — otherwise it slides across the whole gap in view of the player
     if (camSnap) { camera.position.copy(target); camSnap = false; }
     else camera.position.lerp(target, 0.35);
+    camera.lookAt(player.position.x, player.position.y + 1.6, player.position.z);
   } else {
     camera.position.set(Math.sin(t * 0.15) * 22, 10, Math.cos(t * 0.15) * 22);
+    camera.lookAt(player.position.x, player.position.y + 1.6, player.position.z);
   }
-  camera.lookAt(player.position.x, player.position.y + 1.6, player.position.z);
 
   renderer.render(scene, camera);
 }
