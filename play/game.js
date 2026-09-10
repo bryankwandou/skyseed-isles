@@ -2536,6 +2536,27 @@ window.__sky = {
   // Put the child on open ground with the camera at a known angle, so a control test
   // measures the direction the game sends them and not whatever tree they walked into.
   // Returns the widest island's centre so the caller knows where it landed them.
+  // What is the third-person camera actually resting against? A camera that sits at its
+  // minimum distance looks identical whether a tree is in the way or the collision code is
+  // broken, and only one of those is a bug.
+  camProbe: () => {
+    const head = new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z);
+    const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
+    const target = new THREE.Vector3(
+      player.position.x + Math.sin(camYaw) * cp * camDist,
+      player.position.y + 1.6 + sp * camDist,
+      player.position.z + Math.cos(camYaw) * cp * camDist);
+    const toCam = target.clone().sub(head);
+    const want = toCam.length();
+    camRay.set(head, toCam.multiplyScalar(1 / want));
+    camRay.far = want;
+    let blocker = null;
+    for (const h of camRay.intersectObjects(scene.children, true)) {
+      if (camRayBlocks(h.object)) { blocker = { name: h.object.name || h.object.type, dist: +h.distance.toFixed(2) }; break; }
+    }
+    return { camDist, want: +want.toFixed(2), blocker,
+      actual: +camera.position.distanceTo(head).toFixed(2) };
+  },
   clearGround: () => {
     let best = islands[0];
     for (const i of islands) if (i.r > best.r) best = i;
