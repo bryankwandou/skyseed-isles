@@ -28,7 +28,7 @@ await p.evaluateOnNewDocument(() => {
   navigator.getGamepads = () => [window.__pad];
 });
 await p.goto(process.env.TEST_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-await p.waitForSelector('canvas', { timeout: 45000 });
+await p.waitForSelector("canvas", { timeout: 90000 });
 await p.click('#startBtn'); await new Promise(r => setTimeout(r, 1500));
 // the software renderer here manages a couple of frames a second; the lightest preset
 // gives the physics enough simulated time to actually move the child
@@ -114,13 +114,29 @@ ok('forward still means forward in first person', fppUp.fwd > 0.2, 'forward=' + 
 await p.click('#viewBtn'); await new Promise(r => setTimeout(r, 700));
 const back = await state();
 ok('and it switches back', back.view === 'tpp' && back.avatarVisible === true);
-const tppGap = Math.hypot(back.camera[0] - back.player[0], back.camera[2] - back.player[2]);
-ok('the camera returns behind the child', tppGap > 2, 'gap=' + tppGap.toFixed(2));
+// Stand somewhere open first. Third person legitimately pulls the camera in to its 1.6
+// floor when a tree or a wall sits between the head and where the camera wants to be, so
+// measuring the distance while jammed against scenery tests the scenery, not the camera.
+await p.evaluate(() => window.__sky.clearGround());
+await new Promise(r => setTimeout(r, 900));
+// The camera eases into place over frames, and this renderer manages about one a second,
+// so a fixed wait measures the test machine rather than the camera. Poll until it stops.
+let tppGap = 0, steady = 0;
+for (let i = 0; i < 40; i++) {
+  await new Promise(r => setTimeout(r, 250));
+  const st = await state();
+  const g = Math.hypot(st.camera[0] - st.player[0], st.camera[2] - st.player[2]);
+  if (Math.abs(g - tppGap) < 0.05) { if (++steady >= 3) break; } else steady = 0;
+  tppGap = g;
+}
+const probe = await p.evaluate(() => window.__sky.camProbe());
+ok('the camera returns behind the child', tppGap > 2,
+  'gap=' + tppGap.toFixed(2) + ' probe=' + JSON.stringify(probe));
 
 // the choice is remembered, like every other setting
 await p.click('#viewBtn'); await new Promise(r => setTimeout(r, 400));
 await p.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-await p.waitForSelector('canvas', { timeout: 45000 });
+await p.waitForSelector("canvas", { timeout: 90000 });
 await p.click('#startBtn'); await new Promise(r => setTimeout(r, 1500));
 ok('the view choice survives a reload', (await state()).view === 'fpp');
 
