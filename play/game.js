@@ -214,11 +214,113 @@ function makeHouse(isl, ox, oz, rot = 0) {
     isl.solids.push({ x: wx, z: wz, r: 1.5, top: isl.y + 3, stand: false });
   }
   const [dxw, dzw] = world(0, 2.4);
-  const door = { x: dxw, z: dzw, y: isl.y, r: 1.5, isl, key: isl.x.toFixed(1) + ':' + ox.toFixed(1) };
+  return addDoor(isl, dxw, dzw, 'house', ox.toFixed(1));
+}
+
+// Every way in registers the same way, so the frame loop only has to know about `doors`
+// and never about what kind of building it is standing in front of.
+function addDoor(isl, wx, wz, kind, tag) {
+  const door = { x: wx, z: wz, y: isl.y, r: 1.5, isl, kind,
+    key: kind + ':' + isl.x.toFixed(1) + ':' + tag };
   doors.push(door);
   isl.doors = isl.doors || [];
   isl.doors.push(door);
   return door;
+}
+
+// QA asked for "mode dalam gua, mode dalam gunung, mode dalam arena perang". Three more
+// entrances, each leading to a real room rather than to a texture of a room.
+function makeCaveMouth(isl, ox, oz) {
+  const g = new THREE.Group();
+  g.position.set(ox, 0, oz);
+  const rockMat = new THREE.MeshToonMaterial({ color: 0x74707e });
+  const mossMat = new THREE.MeshToonMaterial({ color: 0x5f8f52 });
+  // a boulder pile with a dark hole in it, not a decal: the opening is real geometry set
+  // back from the rock so it reads as depth from every angle a child will look at it
+  for (const [bx, by, bz, br] of [[-1.9, 0.7, 0, 1.5], [1.9, 0.8, 0, 1.6], [0, 2.1, -0.3, 1.9]]) {
+    const b = new THREE.Mesh(new THREE.DodecahedronGeometry(br, 0), rockMat);
+    b.position.set(bx, by, bz); b.rotation.set(bx, by, bz);
+    b.castShadow = true; b.receiveShadow = true; g.add(b);
+  }
+  const mouth = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.25, 2.3, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x120f1c, side: THREE.DoubleSide }));
+  mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 1.15, 0.9); g.add(mouth);
+  const cap = new THREE.Mesh(new THREE.CircleGeometry(1.1, 12),
+    new THREE.MeshBasicMaterial({ color: 0x0d0b14 }));
+  cap.position.set(0, 1.15, -0.3); g.add(cap);
+  for (const [mx, mz] of [[-1.6, 1.1], [1.7, 1.0]]) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), mossMat);
+    m.position.set(mx, 0.25, mz); m.scale.y = 0.4; g.add(m);
+  }
+  // a crystal glimmer at the lip, so the hole invites rather than just sits there
+  const gleam = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0),
+    new THREE.MeshBasicMaterial({ color: 0x9ad0ff }));
+  gleam.position.set(0.8, 1.9, 1.0); g.add(gleam);
+  gleam.add(glowSprite(0x9ad0ff, 1.5));
+  isl.group.add(g);
+  // the boulders are solid; the gap in the middle is the way in
+  for (const [sx, sz] of [[-1.9, 0], [1.9, 0], [0, -0.6]]) {
+    isl.solids.push({ x: isl.x + ox + sx, z: isl.z + oz + sz, r: 1.35, top: isl.y + 2.6, stand: false });
+  }
+  return addDoor(isl, isl.x + ox, isl.z + oz + 1.9, 'cave', ox.toFixed(1));
+}
+
+function makeMountain(isl, ox, oz) {
+  const g = new THREE.Group();
+  g.position.set(ox, 0, oz);
+  const stoneMat = new THREE.MeshToonMaterial({ color: isl.biome.dirt });
+  const snowMat = new THREE.MeshToonMaterial({ color: 0xeef6ff });
+  const peak = new THREE.Mesh(new THREE.ConeGeometry(4.6, 9.5, 7), stoneMat);
+  peak.position.y = 4.75; peak.castShadow = true; peak.receiveShadow = true; g.add(peak);
+  const snow = new THREE.Mesh(new THREE.ConeGeometry(1.7, 3.1, 7), snowMat);
+  snow.position.y = 8.0; g.add(snow);
+  const shoulder = new THREE.Mesh(new THREE.ConeGeometry(2.6, 4.4, 6), stoneMat);
+  shoulder.position.set(3.0, 2.2, 1.1); shoulder.castShadow = true; g.add(shoulder);
+  const tunnel = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.3, 2.6, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x161320, side: THREE.DoubleSide }));
+  tunnel.rotation.x = Math.PI / 2; tunnel.position.set(0, 1.3, 3.4); g.add(tunnel);
+  const back = new THREE.Mesh(new THREE.CircleGeometry(1.15, 12),
+    new THREE.MeshBasicMaterial({ color: 0x100e18 }));
+  back.position.set(0, 1.3, 2.2); g.add(back);
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.45, 0.6),
+    new THREE.MeshToonMaterial({ color: 0x8b8478 }));
+  lintel.position.set(0, 2.75, 3.5); g.add(lintel);
+  isl.group.add(g);
+  // the mountain body is solid all round except the tunnel mouth on the +z side
+  for (const [sx, sz] of [[-2.6, 0.4], [2.6, 0.4], [0, -2.4], [-2.2, 2.4], [2.2, 2.4]]) {
+    isl.solids.push({ x: isl.x + ox + sx, z: isl.z + oz + sz, r: 1.7, top: isl.y + 5, stand: false });
+  }
+  return addDoor(isl, isl.x + ox, isl.z + oz + 4.1, 'mountain', ox.toFixed(1));
+}
+
+function makeArenaGate(isl, ox, oz) {
+  const g = new THREE.Group();
+  g.position.set(ox, 0, oz);
+  const stoneMat = new THREE.MeshToonMaterial({ color: 0xbfae90 });
+  const trimMat = new THREE.MeshToonMaterial({ color: 0xd8a441 });
+  for (const px of [-1.9, 1.9]) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.72, 4.4, 12), stoneMat);
+    col.position.set(px, 2.2, 0); col.castShadow = true; g.add(col);
+    const capital = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.4, 1.7), trimMat);
+    capital.position.set(px, 4.5, 0); g.add(capital);
+    // a banner on each post, because a gate with no colour reads as rubble
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 2.1),
+      new THREE.MeshToonMaterial({ color: px < 0 ? 0xe8574a : 0x4a8fe8, side: THREE.DoubleSide }));
+    flag.position.set(px, 3.1, 0.5); g.add(flag);
+  }
+  const arch = new THREE.Mesh(new THREE.BoxGeometry(5.0, 0.7, 1.1), stoneMat);
+  arch.position.y = 5.0; arch.castShadow = true; g.add(arch);
+  const crest = new THREE.Mesh(new THREE.OctahedronGeometry(0.62, 0), trimMat);
+  crest.position.y = 5.7; g.add(crest);
+  crest.add(glowSprite(0xffd9a0, 2.0));
+  const dark = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 4.2),
+    new THREE.MeshBasicMaterial({ color: 0x1a1526, side: THREE.DoubleSide }));
+  dark.position.set(0, 2.1, -0.35); g.add(dark);
+  isl.group.add(g);
+  for (const px of [-1.9, 1.9]) {
+    isl.solids.push({ x: isl.x + ox + px, z: isl.z + oz, r: 0.9, top: isl.y + 4.4, stand: false });
+  }
+  return addDoor(isl, isl.x + ox, isl.z + oz + 1.4, 'arena', ox.toFixed(1));
 }
 
 // waterfall ribbon under a group child (local coords)
@@ -804,6 +906,13 @@ function decorate(isl, rand) {
   if (rand() < 0.5) { const [x, z] = spot(); makePillar(isl, x, z, 2 + rand() * 3); }
   // a cottage on the roomier islands, always one you can go inside
   if (r > 6 && rand() < 0.45) { const [x, z] = spot(); makeHouse(isl, x, z, rand() * Math.PI * 2); }
+  // ...and the other three ways in. Each one is placed where it belongs rather than
+  // sprinkled evenly: caves in the rocky and crystal biomes, peaks on the big islands,
+  // and an arena rare enough that finding one is an event.
+  const rocky = isl.biome === BIOMES[6] || isl.biome === BIOMES[2] || isl.biome === BIOMES[8];
+  if (r > 7 && rand() < (rocky ? 0.5 : 0.18)) { const [x, z] = spot(); makeCaveMouth(isl, x, z); }
+  if (r > 9 && rand() < 0.3) { const [x, z] = spot(); makeMountain(isl, x, z); }
+  if (r > 10 && rand() < 0.14) { const [x, z] = spot(); makeArenaGate(isl, x, z); }
   if (rand() < 0.35) { const [x, z] = spot(); makeFall(isl, x, z); }
   const seeds = 1 + Math.floor(rand() * 3);
   for (let i = 0; i < seeds; i++) { const [x, z] = spot(); addSeed(isl, x, z); }
@@ -2122,10 +2231,36 @@ function buildDungeon(plan) {
 // interiors inherit the collision, camera and streaming behaviour that is already tested.
 const HOUSE_X = 200000, HOUSE_Z = 200000;
 let insideHouse = false, houseGroup = null, houseIsland = null, houseReturn = null;
-function buildInterior() {
-  const g = new THREE.Group();
-  g.position.set(HOUSE_X, 0, HOUSE_Z);
-  const R = 5.2;
+let insideKind = 'house';
+let nearDoorKind = 'house';
+// Four rooms, one machine. Each entry says how big the room is, where you arrive, what
+// it is called and how to furnish it; everything else -- collision, the camera, the way
+// out, the streaming -- is the code the cottage already proved.
+const INTERIORS = {
+  house: {
+    R: 5.2, spawnZ: 3.4,
+    enter: 'ENTER', msg: 'You are inside. Make yourself at home!',
+    tip: 'Tap ENTER to go inside the house!'
+  },
+  cave: {
+    R: 7.6, spawnZ: 5.6,
+    enter: 'GO IN', msg: 'Inside the cave. The crystals are glowing!',
+    tip: 'Tap GO IN to explore the cave!'
+  },
+  mountain: {
+    R: 8.4, spawnZ: 6.4,
+    enter: 'CLIMB IN', msg: 'Inside the mountain. Climb the ledges to the top!',
+    tip: 'Tap CLIMB IN to go inside the mountain!'
+  },
+  arena: {
+    R: 9.2, spawnZ: 7.0,
+    enter: 'ENTER ARENA', msg: 'The arena! Stand on the podium and take a bow.',
+    tip: 'Tap ENTER ARENA to step into the arena!'
+  }
+};
+
+// ---- the cottage: a hearth, a bed, a table ----
+function furnishHouse(g, R, solid) {
   const floorMat = new THREE.MeshToonMaterial({ color: 0x9a7350 });
   const wallMat = new THREE.MeshToonMaterial({ color: 0xf6ead5, side: THREE.BackSide });
   const woodMat = new THREE.MeshToonMaterial({ color: 0x7a4a30 });
@@ -2133,7 +2268,6 @@ function buildInterior() {
   floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
   const walls = new THREE.Mesh(new THREE.BoxGeometry(R * 2, 6, R * 2), wallMat);
   walls.position.y = 2.7; g.add(walls);
-  // a hearth, because a room with nothing warm in it reads as a box
   const hearth = new THREE.Mesh(new THREE.BoxGeometry(2, 1.4, 0.8),
     new THREE.MeshToonMaterial({ color: 0x8a8f96 }));
   hearth.position.set(0, 0.7, -R + 0.5); g.add(hearth);
@@ -2156,21 +2290,150 @@ function buildInterior() {
     new THREE.MeshToonMaterial({ color: 0xa06bf0 }));
   rug.position.set(0, 0.03, 0.8); g.add(rug);
   g.add(new THREE.HemisphereLight(0xfff0d8, 0x6a5340, 0.85));
+  solid(1.6, 1.2, 1.15, 1.03, true);
+  solid(-3.2, -0.6, 1.1, 0.5, true);
+  solid(0, -R + 0.5, 1.1, 1.4, false);
+}
+
+// ---- the cave: stalagmites you walk around, crystals that light the room ----
+function furnishCave(g, R, solid) {
+  const rockMat = new THREE.MeshToonMaterial({ color: 0x4a4358 });
+  const floorMat = new THREE.MeshToonMaterial({ color: 0x3a3348 });
+  const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, 26), floorMat);
+  floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
+  // a rounded shell rather than a box: caves are not rooms with square corners
+  const shell = new THREE.Mesh(
+    new THREE.SphereGeometry(R + 0.4, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    new THREE.MeshToonMaterial({ color: 0x4a4358, side: THREE.BackSide }));
+  g.add(shell);
+  const CRYSTALS = [[3.4, -2.2, 0xa48fe0], [-4.1, 1.6, 0x8fd0ff], [1.2, 4.6, 0xff9ec6],
+                    [-2.4, -4.4, 0x9affd0]];
+  for (const [cx, cz, col] of CRYSTALS) {
+    const cl = new THREE.Group(); cl.position.set(cx, 0, cz);
+    for (let i = 0; i < 3; i++) {
+      const h = 1.1 + (i % 2) * 0.8;
+      const sh = new THREE.Mesh(new THREE.ConeGeometry(0.3, h, 6),
+        new THREE.MeshBasicMaterial({ color: col }));
+      sh.position.set((i - 1) * 0.42, h / 2, (i % 2) * 0.3);
+      sh.rotation.z = (i - 1) * 0.16; cl.add(sh);
+    }
+    cl.add(glowSprite(col, 3.4));
+    const lamp = new THREE.PointLight(col, 1.5, 16); lamp.position.y = 1.4; cl.add(lamp);
+    g.add(cl);
+    solid(cx, cz, 0.85, 1.9, false);
+  }
+  // stalactites hanging from the roof -- no collision, they are above head height
+  for (let i = 0; i < 9; i++) {
+    const a = i / 9 * Math.PI * 2, d = 1.6 + (i % 3) * 1.7;
+    const st = new THREE.Mesh(new THREE.ConeGeometry(0.26, 1.5 + (i % 3) * 0.6, 6), rockMat);
+    st.position.set(Math.cos(a) * d, 4.6, Math.sin(a) * d);
+    st.rotation.x = Math.PI; g.add(st);
+  }
+  // a rock you can climb onto, so the cave is somewhere to play and not just to look at
+  const boulder = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5, 0), rockMat);
+  boulder.position.set(-1.4, 0.5, 0.4); boulder.castShadow = true; g.add(boulder);
+  solid(-1.4, 0.4, 1.45, 1.45, true);
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(2.0, 22),
+    new THREE.MeshBasicMaterial({ color: 0x3f7fa8, transparent: true, opacity: 0.75 }));
+  pool.rotation.x = -Math.PI / 2; pool.position.set(3.2, 0.03, 2.4); g.add(pool);
+  g.add(new THREE.HemisphereLight(0x8fa8d8, 0x241f38, 0.42));
+}
+
+// ---- the mountain: a hollow peak with a spiral of ledges up to the daylight ----
+function furnishMountain(g, R, solid) {
+  const stoneMat = new THREE.MeshToonMaterial({ color: 0x6f7a86 });
+  const ledgeMat = new THREE.MeshToonMaterial({ color: 0x8b9aa8 });
+  const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, 28), stoneMat);
+  floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.4, R + 0.4, 20, 28, 1, true),
+    new THREE.MeshToonMaterial({ color: 0x6f7a86, side: THREE.BackSide }));
+  shaft.position.y = 9.5; g.add(shaft);
+  // a spiral of standable ledges. This is the one interior that is a climb rather than a
+  // room, which is rather the point of putting one inside a mountain.
+  for (let i = 0; i < 8; i++) {
+    const a = i * 0.85, d = R - 2.1, y = 1.2 + i * 1.35;
+    const lx = Math.cos(a) * d, lz = Math.sin(a) * d;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.45, 2.2), ledgeMat);
+    slab.position.set(lx, y, lz); slab.rotation.y = -a;
+    slab.castShadow = true; slab.receiveShadow = true; g.add(slab);
+    solid(lx, lz, 1.25, y + 0.22, true);
+  }
+  // daylight from the open summit, so "up" reads as somewhere to go
+  const sky = new THREE.Mesh(new THREE.CircleGeometry(3.0, 24),
+    new THREE.MeshBasicMaterial({ color: 0xdfeeff }));
+  sky.rotation.x = Math.PI / 2; sky.position.y = 19.2; g.add(sky);
+  sky.add(glowSprite(0xdfeeff, 9));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 3.0, 18, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14,
+      side: THREE.DoubleSide, depthWrite: false }));
+  beam.position.y = 10; g.add(beam);
+  const top = new THREE.PointLight(0xdfeeff, 1.6, 40); top.position.y = 16; g.add(top);
+  g.add(new THREE.HemisphereLight(0xdfeeff, 0x5a6470, 0.7));
+}
+
+// ---- the arena: a ring, a podium, four braziers ----
+function furnishArena(g, R, solid) {
+  const sandMat = new THREE.MeshToonMaterial({ color: 0xdcc38b });
+  const stoneMat = new THREE.MeshToonMaterial({ color: 0xbfae90 });
+  const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, 30), sandMat);
+  floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
+  // tiered seating, which is what makes an arena feel watched rather than empty
+  for (let t = 0; t < 3; t++) {
+    const rr = R + 0.5 + t * 0.9;
+    const tier = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, 1.1, 30, 1, true),
+      new THREE.MeshToonMaterial({ color: t % 2 ? 0xb0a084 : 0xc8b895, side: THREE.DoubleSide }));
+    tier.position.y = 0.55 + t * 1.0; g.add(tier);
+  }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(R - 1.4, 0.12, 8, 40),
+    new THREE.MeshToonMaterial({ color: 0xd8a441 }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
+  const podium = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 2.0, 0.9, 20), stoneMat);
+  podium.position.set(0, 0.45, 0); podium.castShadow = true; g.add(podium);
+  solid(0, 0, 1.85, 0.9, true);
+  for (const [bx, bz] of [[-5.2, -5.2], [5.2, -5.2], [-5.2, 5.2], [5.2, 5.2]]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.38, 2.2, 10), stoneMat);
+    post.position.set(bx, 1.1, bz); post.castShadow = true; g.add(post);
+    const flame = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffa34a }));
+    flame.position.set(bx, 2.4, bz); g.add(flame);
+    flame.add(glowSprite(0xffb45c, 2.6));
+    flame.add(new THREE.PointLight(0xffb45c, 1.1, 18));
+    solid(bx, bz, 0.55, 2.2, false);
+  }
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2;
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.6),
+      new THREE.MeshToonMaterial({ color: [0xe8574a, 0x4a8fe8, 0x6fce4e, 0xd8a441][i % 4],
+        side: THREE.DoubleSide }));
+    flag.position.set(Math.cos(a) * (R + 1.2), 4.2, Math.sin(a) * (R + 1.2));
+    flag.rotation.y = -a; g.add(flag);
+  }
+  g.add(new THREE.HemisphereLight(0xffe6bd, 0x7a6440, 0.95));
+}
+
+const FURNISH = { house: furnishHouse, cave: furnishCave, mountain: furnishMountain, arena: furnishArena };
+
+function buildInterior(kind) {
+  const spec = INTERIORS[kind] || INTERIORS.house;
+  const R = spec.R;
+  const g = new THREE.Group();
+  g.position.set(HOUSE_X, 0, HOUSE_Z);
+  const solids = [];
+  // furnishers place things in room-local coordinates and this converts them once, so a
+  // room's furniture cannot drift out of step with its collision
+  const solid = (lx, lz, r, top, stand) =>
+    solids.push({ x: HOUSE_X + lx, z: HOUSE_Z + lz, r, top, stand });
+  (FURNISH[kind] || furnishHouse)(g, R, solid);
   scene.add(g);
   houseGroup = g;
   houseIsland = {
     x: HOUSE_X, z: HOUSE_Z, y: 0, r: R, group: g, biome: BIOMES[0],
-    collect: [], slimes: [], doors: [],
-    // the furniture is solid, and `wall` keeps the child inside the room
-    solids: [
-      { x: HOUSE_X + 1.6, z: HOUSE_Z + 1.2, r: 1.15, top: 1.03, stand: true },
-      { x: HOUSE_X - 3.2, z: HOUSE_Z - 0.6, r: 1.1, top: 0.5, stand: true },
-      { x: HOUSE_X, z: HOUSE_Z - R + 0.5, r: 1.1, top: 1.4, stand: false }
-    ],
+    collect: [], slimes: [], doors: [], solids,
     wall: R - 0.3
   };
   islands.push(houseIsland);
 }
+
 function clearInterior() {
   if (houseGroup) {
     houseGroup.traverse(o => {
@@ -2188,23 +2451,28 @@ function clearInterior() {
     houseIsland = null;
   }
 }
-function enterHouse() {
+function enterHouse(kind) {
   if (insideHouse || inDungeon) return false;
+  const k = INTERIORS[kind] ? kind : 'house';
+  const spec = INTERIORS[k];
+  insideKind = k;
   houseReturn = player.position.clone();
   insideHouse = true;
-  buildInterior();
+  buildInterior(k);
   riding = null;
-  player.position.set(HOUSE_X, 0, HOUSE_Z + 3.4);
-  spawn.set(HOUSE_X, 0, HOUSE_Z + 3.4);
+  // arrive just inside the doorway, facing the room, never in the middle of the furniture
+  player.position.set(HOUSE_X, 0, HOUSE_Z + spec.spawnZ);
+  spawn.set(HOUSE_X, 0, HOUSE_Z + spec.spawnZ);
   camSnap = true;
   const b = $('houseLeave'); if (b) b.style.display = 'block';
   chime(640);
-  say(L('You are inside. Make yourself at home!'));
+  say(L(spec.msg));
   return true;
 }
 function leaveHouse() {
   if (!insideHouse) return;
   insideHouse = false;
+  insideKind = 'house';
   clearInterior();
   const back = houseReturn || new THREE.Vector3(0, 0, 3);
   // step out in FRONT of the door, never on top of it, or you walk straight back in
@@ -2413,6 +2681,7 @@ window.__sky = {
     ground: groundHeight(player.position.x, player.position.z),
     view: settings.view,
     insideHouse,
+    insideKind: insideHouse ? insideKind : null,
     avatarVisible: player.visible,
     padSeen
   }),
@@ -2450,7 +2719,16 @@ window.__sky = {
     vel.set(0, 0, 0); camSnap = true;
     return { x: +d.x.toFixed(2), z: +d.z.toFixed(2), y: d.y };
   },
-  enterHouse: () => enterHouse(),
+  enterHouse: (kind) => enterHouse(kind),
+  // what kinds of way-in exist out there, and how many of each
+  doorKinds: () => {
+    const n = {};
+    for (const d of doors) n[d.kind] = (n[d.kind] || 0) + 1;
+    return n;
+  },
+  interiorKinds: () => Object.keys(INTERIORS),
+  interiorSpec: (k) => INTERIORS[k] || null,
+  insideKind: () => (insideHouse ? insideKind : null),
   leaveHouse: () => leaveHouse(),
 
   // the live binding table, so a test can prove a rebind reached the movement code
@@ -3085,7 +3363,7 @@ function setPhotoMode(on) {
   if (on) tip('photo', L('Move the camera to frame your shot, then tap Snap!'));
 }
 const houseEnterBtn = $('houseEnter');
-if (houseEnterBtn) pressBtn(houseEnterBtn, () => enterHouse());
+if (houseEnterBtn) pressBtn(houseEnterBtn, () => enterHouse(nearDoorKind));
 const houseLeaveBtn = $('houseLeave');
 if (houseLeaveBtn) pressBtn(houseLeaveBtn, () => leaveHouse());
 
@@ -3323,10 +3601,19 @@ function animate() {
       for (const d of doors) {
         if (Math.hypot(player.position.x - d.x, player.position.z - d.z) < d.r) { atDoor = d; break; }
       }
+      if (atDoor) nearDoorKind = atDoor.kind;
       const hb = $('houseEnter');
-      if (hb) hb.style.display = atDoor ? 'block' : 'none';
-      if (atDoor && interactPressed) { interactPressed = false; enterHouse(); }
-      if (atDoor) tip('door', L('Tap ENTER to go inside the house!'));
+      if (hb) {
+        hb.style.display = atDoor ? 'block' : 'none';
+        // a cave mouth that says ENTER reads as a bug; the label follows the doorway
+        if (atDoor) {
+          const spec = INTERIORS[atDoor.kind] || INTERIORS.house;
+          const label = L(spec.enter);
+          if (hb.textContent !== label) hb.textContent = label;
+        }
+      }
+      if (atDoor && interactPressed) { interactPressed = false; enterHouse(atDoor.kind); }
+      if (atDoor) tip('door_' + atDoor.kind, L((INTERIORS[atDoor.kind] || INTERIORS.house).tip));
     }
 
     // wonder discovery: first visit to a Great Tree island

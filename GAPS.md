@@ -384,8 +384,32 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
   to 132 units while the fog drew to 180, so islands popped in and out well inside clear view. See
   **Pop-in** above.
 - ✅ **~~Dungeon walls passable~~ — FIXED.** The room had no walls at all. See **Solid world**.
-- [ ] **Interiors (house / cave / mountain / arena)** — still missing, and still the honest answer:
-  these are new features, not repairs. The rift is the one interior that exists.
+- ✅ **~~Interiors (house / cave / mountain / arena)~~ — ALL FOUR SHIPPED.** Every one is a room
+  you walk into through a doorway that exists in the world, not a menu that swaps the screen.
+
+  - **Cottage** — hearth with a live fire, bed, table, rug. Standable furniture.
+  - **Cave** — a domed rock shell, four crystal clusters that actually light the room, hanging
+    stalactites, a pool, and a boulder you can climb onto.
+  - **Mountain** — the one that is a climb rather than a room: a hollow peak with a spiral of
+    eight standable ledges rising to daylight at the open summit.
+  - **Arena** — a sand ring with three tiers of seating, a podium you can stand on, four lit
+    braziers and eight banners.
+
+  They share one machine. `INTERIORS` describes each room's size, arrival point and name; a
+  furnisher places its geometry in room-local coordinates and declares its collision through the
+  same `solid()` call, so a room's furniture cannot drift out of step with what you bump into.
+  Everything else — collision, camera, the way out, the streaming — is the code the cottage
+  already proved, which is why these inherited working behaviour instead of repeating the rift's
+  two bugs.
+
+  Entrances are placed where they belong rather than sprinkled evenly: cave mouths favour the
+  rocky and crystal biomes, peaks need a big island, and an arena is rare enough that finding one
+  is an event. The ENTER button relabels itself for the doorway you are standing in front of —
+  a cave mouth that says ENTER reads as a bug.
+
+  `interior.test.mjs` walks into a real cottage door and, for each of the other three, checks the
+  floor holds, then walks hard at all four walls and confirms the child is still inside and still
+  above the void, then leaves and lands back on the doorstep.
 - ❌ **Real-time co-op with sub-4 ms latency — NOT POSSIBLE AS SPECIFIED.** Under 4 ms round trip
   over the internet is ruled out by the speed of light in fibre (Jakarta–Singapore alone is ~5 ms),
   independent of code quality. Real-time play is worth building (#31); the 4 ms figure is not a
