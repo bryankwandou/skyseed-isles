@@ -74,7 +74,11 @@ for (const key of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) {
 await new Promise(r => setTimeout(r, 400));
 const afterWalking = await state();
 const fromCentre = Math.hypot(afterWalking.player[0] - 200000, afterWalking.player[2] - 200000);
-ok('the walls keep you in the room', fromCentre < 5.2, 'distance from room centre=' + fromCentre.toFixed(2));
+// The nearest door is whatever the world generated -- often a cave mouth, not a cottage --
+// and the rooms are different sizes. Ask the room how big it is rather than assuming 5.2.
+const enteredSpec = await p.evaluate(k => window.__sky.interiorSpec(k), inside.insideKind);
+ok('the walls keep you in the room', fromCentre <= enteredSpec.R,
+  inside.insideKind + ': distance from room centre=' + fromCentre.toFixed(2) + ' wall=' + enteredSpec.R);
 ok('you did not fall out of the world', afterWalking.player[1] > -5, 'y=' + afterWalking.player[1]);
 ok('and you are still inside', afterWalking.insideHouse === true, 'walked from ' + JSON.stringify(walked));
 
@@ -88,6 +92,62 @@ ok('you come out where you went in', backGap < 3, 'gap=' + backGap.toFixed(2));
 ok('the world is still there when you come out', back.ground > -Infinity, 'ground=' + back.ground);
 const leaveHidden = await p.evaluate(() => document.getElementById('houseLeave').style.display !== 'block');
 ok('the way-out button goes away outside', leaveHidden);
+
+// ---------- the other three rooms ----------
+// "tidak ada mode dalam rumah, mode dalam gua, mode dalam gunung, mode dalam arena perang".
+// Each of these has to be a real room: a floor that holds you up, walls that keep you in,
+// and a way back out to exactly where you were standing.
+const kinds = await p.evaluate(() => window.__sky.interiorKinds());
+ok('all four interiors exist', ['house', 'cave', 'mountain', 'arena'].every(k => kinds.includes(k)),
+  kinds.join(', '));
+
+for (const kind of ['cave', 'mountain', 'arena']) {
+  const spec = await p.evaluate(k => window.__sky.interiorSpec(k), kind);
+  const before = await state();
+  const entered = await p.evaluate(k => window.__sky.enterHouse(k), kind);
+  await new Promise(r => setTimeout(r, 1200));
+  const st = await state();
+  ok(kind + ': you can go inside', entered === true && st.insideHouse === true,
+    'kind=' + st.insideKind);
+  ok(kind + ': the room is somewhere else',
+    Math.hypot(st.player[0] - before.player[0], st.player[2] - before.player[2]) > 100);
+  ok(kind + ': there is floor under your feet', st.ground > -Infinity, 'ground=' + st.ground);
+
+  const rest = await settle(x => x.player[1]);
+  ok(kind + ': you stand on the floor instead of falling', rest > -5 && Math.abs(rest - st.ground) < 0.4,
+    'y=' + rest + ' ground=' + st.ground);
+
+  // walk hard at every wall; a room you can leave by walking is not a room
+  for (const key of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) {
+    await p.keyboard.down(key);
+    await new Promise(r => setTimeout(r, 1500));
+    await p.keyboard.up(key);
+  }
+  await new Promise(r => setTimeout(r, 400));
+  const after = await state();
+  const d = Math.hypot(after.player[0] - 200000, after.player[2] - 200000);
+  ok(kind + ': the walls keep you in', d <= spec.R, 'distance=' + d.toFixed(2) + ' wall=' + spec.R);
+  ok(kind + ': you did not fall out of the world', after.player[1] > -5, 'y=' + after.player[1]);
+
+  // Walking at a wall on a renderer managing about one frame a second moves the child a few
+  // centimetres, which proves nothing. Put them well outside the room instead and check the
+  // next frame pulls them back in -- that is the wall doing its job, at a distance no amount
+  // of slow simulation can fake.
+  await p.evaluate(k => {
+    const R = window.__sky.interiorSpec(k).R;
+    window.__sky.dropAt(200000 + R + 6, 200000, 0.5);
+  }, kind);
+  const pushed = await settle(x => Math.hypot(x.player[0] - 200000, x.player[2] - 200000), 30, 0.05);
+  ok(kind + ': dropped outside, the wall pulls you back in', pushed <= spec.R,
+    'ended ' + pushed.toFixed(2) + ' from centre, wall at ' + spec.R);
+
+  await p.evaluate(() => window.__sky.leaveHouse());
+  await new Promise(r => setTimeout(r, 1300));
+  const out = await state();
+  ok(kind + ': and you can leave again', out.insideHouse === false && out.insideKind === null);
+  ok(kind + ': you come out where you went in',
+    Math.hypot(out.player[0] - before.player[0], out.player[2] - before.player[2]) < 3);
+}
 
 console.log('--- errors ---'); errs.slice(0, 5).forEach(e => console.log(e));
 console.log('INTERIOR TEST:', fails.length === 0 && errs.length === 0 ? 'PASS' : 'FAIL ' + fails.join(', '));
