@@ -389,6 +389,17 @@
     display:flex; justify-content:center; gap:14px; font-weight:700; font-size:14px;
     background:#eef4fb; border-radius:12px; padding:10px; margin-bottom:4px; color:#1d3a5f;
   }
+  #shopReceipt {
+    margin-top:10px; padding:10px 12px; border-radius:12px; text-align:center;
+    background:rgba(120,200,140,.14); border:1px solid rgba(120,200,140,.4);
+  }
+  /* a receipt is there to be tapped, so it gets a real 40px target and a focus ring */
+  #shopReceipt a {
+    color:#1d6b3a; font-weight:700; text-decoration:underline;
+    display:inline-block; min-height:40px; line-height:40px; padding:0 8px;
+  }
+  #shopReceipt a:focus-visible { outline:3px solid #1d6b3a; outline-offset:2px; }
+  #shopReceipt .receiptNote { font-size:.78em; opacity:.75; margin-top:2px; }
   .shopRow {
     display:flex; align-items:center; gap:10px; padding:10px; border-radius:12px;
     background:#eef4fb; margin-bottom:7px;
@@ -620,6 +631,8 @@
     <div id="shopEnergyBox"></div>
     <h3 data-i18n="Skins">Skins</h3>
     <div id="shopSkinBox"></div>
+    <!-- the on-chain receipt, shown only when there is a real transaction to point at -->
+    <div id="shopReceipt" role="status" style="display:none"></div>
     <p id="shopNote" data-i18n="SHOP_NOTE">No real money is ever used here. Seeds are earned in game, and dungeons are optional — the open world never needs energy.</p>
     <button id="shopClose" data-i18n="Close (T)">Close (T)</button>
   </div>

@@ -2024,10 +2024,73 @@ function updateShopHud() {
   if (et) et.textContent = energyEta() ? L('next in {t}', { t: etaText() }) : L('full');
 }
 
+// ---------- purchases ----------
+// Two paths on purpose.
+//
+// Logged in, the server is the authority: it holds the prices, checks the balance and
+// moves it, and writes a receipt on Solana devnet. A child editing `seeds` in devtools
+// then buying a crown gets a 402, because the shop the client draws is not the shop the
+// server bills. Twelve children will absolutely try this.
+//
+// Logged out -- the static host, a school tablet with no account yet, devnet having an
+// afternoon -- the game still works exactly as it always has, locally. A shop that only
+// works when the network does is a shop that is closed when a child gets home.
+let lastReceipt = null;
+function serverBuy(item, onLocal) {
+  if (!serverUser) { onLocal(); return; }
+  fetch('/api/buy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item })
+  }).then(r => r.json().then(d => ({ ok: r.ok, status: r.status, d })))
+    .then(({ ok, status, d }) => {
+      if (!ok) {
+        if (status === 402) say(L('Not enough Seeds yet — keep exploring!'));
+        else if (status === 409) say(L('You already own that one.'));
+        else onLocal();   // an unknown server problem must not cost a child their purchase
+        return;
+      }
+      // take the server's word for what was bought, rather than guessing alongside it
+      progress.seeds = d.seeds;
+      if (Array.isArray(d.skins)) progress.skins = d.skins;
+      if (typeof d.energy === 'number') progress.energy = d.energy;
+      saveProgress(); updateShopHud(); renderShop();
+      lastReceipt = d.receipt || null;
+      showReceipt(d.receipt, d.receiptNote);
+    })
+    .catch(() => onLocal());   // offline: fall back rather than swallowing the purchase
+}
+
+// An on-chain receipt is only worth showing if a person can click it and land on the
+// explorer looking at their own transaction. Anything less is a badge that says "trust me".
+function showReceipt(receipt, note) {
+  const box = $('shopReceipt');
+  if (!box) return;
+  if (receipt && receipt.explorer) {
+    box.innerHTML = '';
+    const a = document.createElement('a');
+    a.href = receipt.explorer;
+    a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.textContent = L('View receipt on Solana devnet ↗');
+    box.appendChild(a);
+    const small = document.createElement('div');
+    small.className = 'receiptNote';
+    small.textContent = L('Devnet only — no real money.');
+    box.appendChild(small);
+    box.style.display = 'block';
+  } else if (note) {
+    box.textContent = '';
+    box.style.display = 'none';
+  }
+}
+
 function buyRefill() {
   const cost = REFILL_COST;
   if ((progress.energy ?? ENERGY_MAX) >= ENERGY_MAX) { say(L('Your energy is already full.')); return; }
   if ((progress.seeds || 0) < cost) { say(L('Not enough Seeds yet — keep exploring!')); return; }
+  serverBuy('refill', buyRefillLocal);
+}
+function buyRefillLocal() {
+  const cost = REFILL_COST;
   progress.seeds -= cost;
   progress.energy = Math.min(ENERGY_MAX, (progress.energy ?? ENERGY_MAX) + 1);
   saveProgress(); chime(980); updateShopHud(); renderShop();
@@ -2037,6 +2100,9 @@ function buyRefill() {
 function buySkin(item) {
   if (ownsSkin(item.id)) { say(L('You already own that one.')); return; }
   if ((progress.seeds || 0) < item.price) { say(L('Not enough Seeds yet — keep exploring!')); return; }
+  serverBuy(item.id, () => buySkinLocal(item));
+}
+function buySkinLocal(item) {
   progress.seeds -= item.price;
   progress.skins = [...(progress.skins || []), item.id];
   saveProgress(); chime(1180); updateShopHud(); renderShop();
@@ -2728,6 +2794,12 @@ window.__sky = {
   },
   interiorKinds: () => Object.keys(INTERIORS),
   interiorSpec: (k) => INTERIORS[k] || null,
+  // the shop the child sees, so a test can hold it against the server's price list
+  shopCatalog: () => ({
+    refill: REFILL_COST,
+    skins: SHOP_SKINS.map(s2 => ({ id: s2.id, price: s2.price }))
+  }),
+  lastReceipt: () => lastReceipt,
   insideKind: () => (insideHouse ? insideKind : null),
   leaveHouse: () => leaveHouse(),
 

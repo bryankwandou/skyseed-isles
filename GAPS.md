@@ -410,6 +410,38 @@ unlimited. Only optional extras cost anything, and only in devnet test currency.
   `interior.test.mjs` walks into a real cottage door and, for each of the other three, checks the
   floor holds, then walks hard at all four walls and confirms the child is still inside and still
   above the void, then leaves and lands back on the doorstep.
+- 🟡 **In-game purchase on Solana devnet — BUILT, one step from provable.** The shop now has a
+  server-authoritative purchase path (`api/buy.js`) that holds the prices, checks the balance,
+  moves it, and writes a receipt to Solana devnet as a memo transaction. The child gets a link
+  straight to the explorer showing their own transaction.
+
+  Three decisions worth stating plainly, because an auditor will ask about each:
+
+  1. **The cluster is pinned in code**, not read from the environment. Devnet with a
+     zero-value token is the only setting in which the rest of this design is acceptable, so
+     moving to mainnet is deliberately not a dashboard edit. See the note at the top of
+     `api/_solana.mjs`.
+  2. **The treasury key is custodial and server-side.** Twelve children have no wallets, and
+     devnet SOL cannot be earned without one. This is defensible *only* because the key guards
+     nothing: devnet SOL is free, and SKY has zero monetary value by design. On mainnet the same
+     design would be a real custody problem and a different product with different law attached.
+  3. **The chain is not in the critical path.** Seeds move in the database first; the receipt is
+     written afterwards, and every failure in it is reported as a missing receipt rather than a
+     failed purchase. A child who earned a hat gets the hat even when devnet is having an
+     afternoon.
+
+  **What is not yet proven:** a live devnet submission. That needs a funded devnet keypair in
+  `SOLANA_TREASURY_KEY`, and this machine has none — the public faucet meters by IP and is
+  exhausted. `purchase.test.mjs` therefore proves everything up to the send: the cluster is
+  pinned, a malformed key stands the feature down instead of crashing the shop, the receipt
+  serialises to a real signed memo transaction carrying the purchase, the explorer link points
+  at devnet, and — the one that would actually bite — the server's price list matches the shop
+  the child is looking at, item by item. A catalogue that has drifted rejects honest purchases,
+  which reads to a child as a broken game and to an auditor as a fake shop.
+
+  Set `SOLANA_TREASURY_KEY` (base58/JSON array of a funded devnet keypair) in the Vercel
+  environment and receipts start appearing with no code change.
+
 - ❌ **Real-time co-op with sub-4 ms latency — NOT POSSIBLE AS SPECIFIED.** Under 4 ms round trip
   over the internet is ruled out by the speed of light in fibre (Jakarta–Singapore alone is ~5 ms),
   independent of code quality. Real-time play is worth building (#31); the 4 ms figure is not a
