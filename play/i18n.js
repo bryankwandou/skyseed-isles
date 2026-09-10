@@ -119,6 +119,8 @@ export const STRINGS = {
     'Back outside.': 'Kembali ke luar.',
     'Tap ENTER to go inside the house!': 'Ketuk MASUK untuk masuk ke dalam rumah!',
     'GO IN': 'MASUK GUA',
+    'View receipt on Solana devnet \u2197': 'Lihat bukti di Solana devnet \u2197',
+    'Devnet only \u2014 no real money.': 'Devnet saja \u2014 tanpa uang asli.',
     'CLIMB IN': 'MASUK GUNUNG',
     'ENTER ARENA': 'MASUK ARENA',
     'Inside the cave. The crystals are glowing!': 'Di dalam gua. Kristalnya menyala!',

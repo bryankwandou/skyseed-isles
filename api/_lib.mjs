@@ -3,7 +3,19 @@ import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-export const sql = neon(process.env.DATABASE_URL);
+// Connect on first use, not at import. `neon()` throws when DATABASE_URL is unset, and at
+// module scope that turns one missing environment variable into an route that cannot even be
+// imported -- the whole file fails to load, so the handler never runs and never gets to
+// report what is wrong. Lazily, the same mistake surfaces as a 500 on the one request that
+// needed the database, with a message saying so.
+let _sql = null;
+export const sql = (strings, ...values) => {
+  if (!_sql) {
+    if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+    _sql = neon(process.env.DATABASE_URL);
+  }
+  return _sql(strings, ...values);
+};
 export { bcrypt };
 
 const SECRET = process.env.AUTH_SECRET || 'dev-insecure-secret-change-me';

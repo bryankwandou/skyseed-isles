@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Skyseed Isles \u2014 endless kid-first 3D platformer with accounts and saved progress.",
+  "description": "Skyseed Isles — endless kid-first 3D platformer with accounts and saved progress.",
   "scripts": {
     "check": "node --input-type=module --check < play/game.js && node --input-type=module --check < play/i18n.js && node --check play/account.js && node --check play/sw.js",
     "reset-parent": "node scripts/reset-parent-password.mjs",
@@ -20,6 +20,7 @@
     "test:interior": "node test/interior.test.mjs",
     "test:pad": "node test/pad-view.test.mjs",
     "test:portrait": "node test/portrait.test.mjs",
+    "test:purchase": "node test/purchase.test.mjs",
     "test:quests": "node test/quests.test.mjs",
     "test:shop": "node test/shop.test.mjs",
     "test:signup": "node test/signup.test.mjs",
@@ -30,6 +31,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
+    "@solana/web3.js": "^1.99.0",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2"
   },
