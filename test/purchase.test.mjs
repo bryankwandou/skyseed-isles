@@ -10,8 +10,9 @@
 // keypair and this machine has none. That gap is stated in GAPS.md rather than papered over
 // with a test that mocks the RPC and proves only that the mock was called.
 import puppeteer from 'puppeteer-core';
-import { Keypair, Transaction, TransactionInstruction } from '@solana/web3.js';
-import { CLUSTER, RPC, MEMO_PROGRAM, treasury, explorerTx } from '../api/_solana.mjs';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import bs58 from 'bs58';
+import { CLUSTER, RPC, MEMO_PROGRAM, treasury, explorerTx, buildReceiptTx } from '../api/_solana.mjs';
 
 const fails = [];
 const ok = (n, c, d) => { console.log((c ? 'ok   ' : 'FAIL ') + n + (d ? '  ' + d : '')); if (!c) fails.push(n); };
@@ -28,26 +29,51 @@ delete process.env.SOLANA_TREASURY_KEY;
 ok('with no treasury key configured, the receipt path stands down', treasury() === null);
 process.env.SOLANA_TREASURY_KEY = 'this-is-not-a-key';
 ok('a malformed treasury key is refused rather than crashing the shop', treasury() === null);
+
+// a key whose halves disagree is the dangerous shape: it parses, and then every receipt it
+// signs is rejected by the cluster with no clue why. Catch it at load instead.
+const realSecret = ed25519.utils.randomSecretKey();
+const realPub = ed25519.getPublicKey(realSecret);
+process.env.SOLANA_TREASURY_KEY = JSON.stringify([...realSecret, ...realPub]);
+const loaded = treasury();
+ok('a well-formed devnet key loads', !!loaded && loaded.address === bs58.encode(realPub),
+  loaded && loaded.address);
+process.env.SOLANA_TREASURY_KEY = JSON.stringify([...realSecret, ...new Uint8Array(32)]);
+ok('a key whose public half does not match is refused', treasury() === null);
 delete process.env.SOLANA_TREASURY_KEY;
 
 // ---------- a receipt is a well-formed memo transaction ----------
-// Built and signed locally. Nothing is sent: this proves the shape of what would be sent.
-const throwaway = Keypair.generate();
+// Built and signed locally against a throwaway key. Nothing is sent: this proves the exact
+// bytes that would be sent, which matters more here than usual because these bytes are
+// assembled by hand rather than by a library (see the note in _solana.mjs about why).
+const secret = ed25519.utils.randomSecretKey();
+const throwaway = { secret, publicKey: ed25519.getPublicKey(secret) };
 const note = 'skyseed:buy:aurora:testchild:' + new Date().toISOString();
-const tx = new Transaction().add(new TransactionInstruction({
-  keys: [{ pubkey: throwaway.publicKey, isSigner: true, isWritable: true }],
-  programId: MEMO_PROGRAM,
-  data: Buffer.from(note, 'utf8')
-}));
-tx.recentBlockhash = '11111111111111111111111111111111';
-tx.feePayer = throwaway.publicKey;
-tx.sign(throwaway);
-const raw = tx.serialize();
-ok('a purchase receipt serialises to a real transaction', raw.length > 100 && raw.length < 1232,
-  raw.length + ' bytes');
-ok('the receipt carries the purchase in its memo',
-  Buffer.from(tx.instructions[0].data).toString('utf8') === note);
-ok('the receipt is signed', tx.signatures.length === 1 && tx.signatures[0].signature !== null);
+const blockhash = bs58.encode(new Uint8Array(32).fill(7));
+const built = buildReceiptTx(throwaway, blockhash, note);
+
+ok('a purchase receipt is a transaction of a legal size',
+  built.raw.length > 100 && built.raw.length < 1232, built.raw.length + ' bytes');
+ok('the signature verifies against the message it signs', built.valid === true);
+ok('the transaction carries exactly one signature', built.raw[0] === 1);
+ok('the message declares one signer', built.message[0] === 1,
+  'header=' + Array.from(built.message.slice(0, 3)).join(','));
+
+// the memo the auditor will read on the explorer has to be the purchase, byte for byte
+const tail = Buffer.from(built.message).toString('utf8');
+ok('the receipt carries the purchase in its memo', tail.endsWith(note), note);
+
+// the second account key must be the memo program, or the transaction runs the wrong code
+const keysAt = 3 + 1;                       // header (3) + compact-u16 count for 2 keys (1)
+const secondKey = bs58.encode(built.message.slice(keysAt + 32, keysAt + 64));
+ok('the instruction targets the memo program', secondKey === MEMO_PROGRAM, secondKey);
+const firstKey = bs58.encode(built.message.slice(keysAt, keysAt + 32));
+ok('the fee payer is the treasury key that signed it',
+  firstKey === bs58.encode(throwaway.publicKey), firstKey);
+const bhAt = keysAt + 64;
+ok('the blockhash is where the runtime expects it',
+  bs58.encode(built.message.slice(bhAt, bhAt + 32)) === blockhash);
+
 ok('an explorer link points at devnet', /cluster=devnet/.test(explorerTx('abc')), explorerTx('abc'));
 
 // ---------- the server's prices are the shop's prices ----------
