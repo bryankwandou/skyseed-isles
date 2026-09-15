@@ -561,7 +561,10 @@ const settings = Object.assign({
   contrast: false, bigText: false, lang: 'id', tut: {},
   // graphics, each one adjustable on its own; touching any of them flips quality to 'custom'
   renderScale: 1, shadows: 'soft', viewDist: 180, effects: 1, fpsCap: 0, showFps: false,
-  autoAdjust: true, keys: {}, view: 'tpp'
+  autoAdjust: true, keys: {}, view: 'tpp',
+  // picture: applied on top of every preset, so a dim screen or a washed-out projector can
+  // be corrected without giving up the quality the device can run
+  brightness: 1, contrastLvl: 1, saturation: 1
 }, savedSettings);
 setLang(settings.lang);
 translateDom();
@@ -579,7 +582,10 @@ const QUALITY_PRESETS = {
   low:    { renderScale: 0.8,  shadows: 'off',   viewDist: 120, effects: 0.5,  fpsCap: 0 },
   medium: { renderScale: 1,    shadows: 'soft',  viewDist: 150, effects: 0.75, fpsCap: 0 },
   high:   { renderScale: 1,    shadows: 'soft',  viewDist: 180, effects: 1,    fpsCap: 0 },
-  ultra:  { renderScale: 1.35, shadows: 'sharp', viewDist: 300, effects: 1.4,  fpsCap: 0 }
+  superhigh: { renderScale: 1.15, shadows: 'sharp', viewDist: 240, effects: 1.2, fpsCap: 0 },
+  ultra:  { renderScale: 1.35, shadows: 'sharp', viewDist: 300, effects: 1.4,  fpsCap: 0 },
+  // for a desktop GPU with headroom: supersampled, the 4096 shadow map, the whole stream
+  extreme: { renderScale: 1.75, shadows: 'sharp', viewDist: 320, effects: 1.5, fpsCap: 0 }
 };
 function applyPreset(name) {
   const p = QUALITY_PRESETS[name];
@@ -607,7 +613,7 @@ function applyQuality() {
   renderer.shadowMap.enabled = shadowsOn;
   renderer.shadowMap.type = s.shadows === 'sharp' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   sun.castShadow = shadowsOn;
-  const mapSize = s.shadows === 'sharp' ? 2048 : 1024;
+  const mapSize = s.shadows === 'sharp' ? (s.renderScale >= 1.6 ? 4096 : 2048) : 1024;
   if (sun.shadow.mapSize.x !== mapSize) {
     sun.shadow.mapSize.set(mapSize, mapSize);
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
@@ -626,8 +632,17 @@ function applyQuality() {
   camera.far = Math.max(400, far * 1.5);
   camera.updateProjectionMatrix();
   document.body.classList.toggle('showFps', !!s.showFps);
+  applyPicture();
   saveSettings();
 }
+// Brightness, contrast and colour as a CSS filter on the canvas: it costs one compositing
+// pass, works on every GPU the game already runs on, and is dropped entirely at neutral.
+function pictureFilter() {
+  const s = settings;
+  if (s.brightness === 1 && s.contrastLvl === 1 && s.saturation === 1) return '';
+  return 'brightness(' + s.brightness + ') contrast(' + s.contrastLvl + ') saturate(' + s.saturation + ')';
+}
+function applyPicture() { renderer.domElement.style.filter = pictureFilter(); }
 // push the live settings back into the panel, so a preset pick or an auto-adjust shows up
 // on every slider instead of leaving the panel lying about what is running.
 function syncGraphicsUI() {
@@ -639,6 +654,9 @@ function syncGraphicsUI() {
   set('setView', s.viewDist); txt('setViewV', s.viewDist);
   set('setFx', s.effects); txt('setFxV', Math.round(s.effects * 100) + '%');
   set('setFpsCap', String(s.fpsCap));
+  set('setBright', s.brightness); txt('setBrightV', Math.round(s.brightness * 100) + '%');
+  set('setCon', s.contrastLvl); txt('setConV', Math.round(s.contrastLvl * 100) + '%');
+  set('setSat', s.saturation); txt('setSatV', Math.round(s.saturation * 100) + '%');
   const sf = $('setShowFps'); if (sf) sf.checked = !!s.showFps;
   const sa = $('setAuto'); if (sa) sa.checked = !!s.autoAdjust;
 }
@@ -2774,7 +2792,9 @@ window.__sky = {
     fps: +fpsNow.toFixed(1),
     showFps: settings.showFps,
     meterText: ($('fpsMeter') || {}).textContent,
-    autoAdjust: settings.autoAdjust
+    autoAdjust: settings.autoAdjust,
+    brightness: settings.brightness, contrastLvl: settings.contrastLvl, saturation: settings.saturation,
+    canvasFilter: renderer.domElement.style.filter
   }),
   // interiors: how many doors are loaded, and a way to reach one without hunting
   doors: () => doors.length,
@@ -2951,7 +2971,7 @@ const DEFAULT_KEYS = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',
   jump: 'Space', sprint: 'ShiftLeft', punch: 'KeyF', interact: 'KeyE',
   pet: 'KeyP', ride: 'KeyR', journal: 'KeyJ', wardrobe: 'KeyK',
-  buddies: 'KeyN', map: 'KeyM', shop: 'KeyT', camLeft: 'KeyQ', view: 'KeyV', coop: 'KeyG'
+  buddies: 'KeyN', map: 'KeyM', shop: 'KeyT', camLeft: 'KeyQ', view: 'KeyV', coop: 'KeyG', bag: 'KeyI'
 };
 const ALT_KEYS = {
   forward: ['ArrowUp'], back: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
@@ -3002,14 +3022,15 @@ const TAP_ACTIONS = {
   map: () => { const mp = $('mapWrap'); if (mp) mp.classList.toggle('big'); },
   view: () => setViewMode(settings.view === 'fpp' ? 'tpp' : 'fpp'),
   shop: () => { const sh = $('shop'); if (sh && sh.classList.contains('on')) closeShop(); else openShop(); },
-  coop: () => { const cp = $('coop'); if (cp && cp.classList.contains('on')) closeCoop(); else openCoop(); }
+  coop: () => { const cp = $('coop'); if (cp && cp.classList.contains('on')) closeCoop(); else openCoop(); },
+  bag: () => { const bg = $('bag'); if (bg && bg.classList.contains('on')) closeBag(); else openBag(); }
 };
 // ---- the rebinding panel ----
 const BIND_LABELS = {
   forward: 'Walk forward', back: 'Walk back', left: 'Step left', right: 'Step right',
   jump: 'Jump', sprint: 'Run', punch: 'Pow', interact: 'Talk', pet: 'Pet buddy',
   ride: 'Ride buddy', journal: 'Journal', wardrobe: 'Wardrobe', buddies: 'Buddies',
-  map: 'Map', shop: 'Shop', camLeft: 'Turn camera', view: 'Eyes or camera', coop: 'Play together'
+  map: 'Map', shop: 'Shop', camLeft: 'Turn camera', view: 'Eyes or camera', coop: 'Play together', bag: 'Bag'
 };
 // KeyW reads as gibberish to a seven-year-old; show the letter on the cap instead
 function keyLabel(code) {
@@ -3410,6 +3431,11 @@ function bindSetting(id, apply) {
   dial('setView', el => { settings.viewDist = +el.value; });
   dial('setFx', el => { settings.effects = +el.value; });
   dial('setFpsCap', el => { settings.fpsCap = +el.value; });
+  // picture dials are not part of a preset, so moving them leaves the preset name alone
+  const pic = (id, key) => bindSetting(id, el => { settings[key] = +el.value; applyPicture(); saveSettings(); syncGraphicsUI(); });
+  pic('setBright', 'brightness'); pic('setCon', 'contrastLvl'); pic('setSat', 'saturation');
+  const pr = $('setPicReset');
+  if (pr) pr.addEventListener('click', () => { settings.brightness = settings.contrastLvl = settings.saturation = 1; applyPicture(); saveSettings(); syncGraphicsUI(); });
   const sfps = $('setShowFps');
   if (sfps) sfps.addEventListener('change', () => {
     settings.showFps = sfps.checked; saveSettings();
@@ -3507,7 +3533,7 @@ function doPunch(t) {
 
 // FPS governor: if the frame rate stays low, step down one preset at a time rather than
 // dropping straight to the floor, and only while the child has left auto-adjust on.
-const PRESET_LADDER = ['ultra', 'high', 'medium', 'low', 'potato'];
+const PRESET_LADDER = ['extreme', 'ultra', 'superhigh', 'high', 'medium', 'low', 'potato'];
 // Measured on the wall clock, never on the frame delta: the delta is clamped to 50 ms so
 // a stall cannot fling the player across the map, and counting frames against a clamped
 // delta reports a comfortable 20 FPS on a device that is really managing one. That lie is
@@ -3764,6 +3790,331 @@ function openCoop() {
   const el = $('coop'); if (el) el.classList.add('on');
 }
 function closeCoop() { const el = $('coop'); if (el) el.classList.remove('on'); }
+
+// ---------- the Bag: what Miru carries, and combining it into something useful ----------
+// Materials drop from the pickups a child is already collecting, so the Bag fills up by
+// playing, never by paying. Every crafted item does a real thing in the world; an item that
+// only sits in a grid is a number with a picture on it.
+//
+// Icons are rendered from small 3D models once, the first time the Bag opens, on a throwaway
+// WebGL context -- the same lighting model as the world, so the berry in the Bag is the berry
+// you picked up rather than an emoji standing in for it.
+const BAG_ITEMS = {
+  berry:  { name: 'Wild Berry',    desc: 'Found inside seeds. Buddies love them.', kind: 'material' },
+  twig:   { name: 'Dry Twig',      desc: 'Snaps off the trees when you gather seeds.', kind: 'material' },
+  pebble: { name: 'River Pebble',  desc: 'Smooth and heavy. Stars sometimes leave one behind.', kind: 'material' },
+  shard:  { name: 'Sky Shard',     desc: 'A splinter of crystal from rings and rift crystals.', kind: 'material' },
+  petal:  { name: 'Moonpetal',     desc: 'A petal that glows faintly after dark.', kind: 'material' },
+  treat:  { name: 'Buddy Treat',   desc: 'Give it to a buddy nearby: a big boost to happiness and growth.', kind: 'use' },
+  tonic:  { name: 'Wind Tonic',    desc: 'Drink it to run 30% faster for 45 seconds.', kind: 'use' },
+  charm:  { name: 'Glow Charm',    desc: 'A small light that follows you. Handy in caves and at night.', kind: 'toggle' }
+};
+const BAG_ORDER = ['berry', 'twig', 'pebble', 'shard', 'petal', 'treat', 'tonic', 'charm'];
+const RECIPES = [
+  { id: 'treat', makes: 'treat', needs: { berry: 2, twig: 1 } },
+  { id: 'tonic', makes: 'tonic', needs: { berry: 1, pebble: 2 } },
+  { id: 'charm', makes: 'charm', needs: { shard: 2, petal: 1 } }
+];
+if (!progress.bag || typeof progress.bag !== 'object') progress.bag = {};
+// berries were counted before the Bag existed; they stay in progress.berries so the buddy
+// panel and the Skykeeper keep working, and the Bag reads the same number.
+function bagCount(id) { return id === 'berry' ? (progress.berries || 0) : (progress.bag[id] || 0); }
+function bagAdd(id, n) {
+  if (id === 'berry') progress.berries = Math.max(0, (progress.berries || 0) + n);
+  else progress.bag[id] = Math.max(0, (progress.bag[id] || 0) + n);
+}
+function canCombine(r) { return Object.keys(r.needs).every(k => bagCount(k) >= r.needs[k]); }
+
+// what a pickup leaves in the Bag, on top of its sparks
+function bagDropFor(kind) {
+  const roll = Math.random();
+  if (kind === 'seed' && roll < 0.22) return 'twig';
+  if (kind === 'star' && roll < 0.45) return 'pebble';
+  if (kind === 'ring' && roll < 0.6) return 'shard';
+  if (kind === 'petal') return 'petal';
+  if (kind === 'dcrystal') return 'shard';
+  return null;
+}
+function bagOnPickup(kind) {
+  const id = bagDropFor(kind);
+  if (!id) return;
+  bagAdd(id, 1);
+  if (!settings.tut.bag) tip('bag', L('{item} went into your Bag. Press I to open it.', { item: L(BAG_ITEMS[id].name) }));
+  const el = $('bag'); if (el && el.classList.contains('on')) renderBag();
+}
+
+// ---- rendered icons ----
+const bagIcons = {};
+function bagModel(id) {
+  const g = new THREE.Group();
+  const std = (color, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.6, metalness: 0 }, o));
+  if (id === 'berry') {
+    const skin = std(0xb3163a, { roughness: 0.28 });
+    [[0, 0, 0, 0.42], [0.46, -0.12, 0.1, 0.36], [-0.3, -0.18, 0.34, 0.33]].forEach(([x, y, z, r]) => {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 24), skin); b.position.set(x, y, z); g.add(b);
+    });
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.5, 8), std(0x5a4228));
+    stem.position.set(0.05, 0.55, -0.02); stem.rotation.z = -0.3; g.add(stem);
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 12), std(0x3f8a3a, { roughness: 0.5 }));
+    leaf.scale.set(1, 0.14, 0.5); leaf.position.set(0.3, 0.72, 0); leaf.rotation.z = 0.5; g.add(leaf);
+  } else if (id === 'twig') {
+    const bark = std(0x6b4a2e, { roughness: 0.95 });
+    const main = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 1.9, 9), bark);
+    main.rotation.z = 0.8; g.add(main);
+    [[0.18, 0.28, -0.5, 0.7], [-0.32, -0.2, 0.6, 0.55]].forEach(([x, y, rz, len]) => {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.06, len, 7), bark);
+      b.position.set(x, y, 0); b.rotation.z = rz; g.add(b);
+    });
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 10), std(0x8a9a3a));
+    leaf.scale.set(1, 0.15, 0.55); leaf.position.set(0.5, 0.52, 0.05); g.add(leaf);
+  } else if (id === 'pebble') {
+    const geo = new THREE.IcosahedronGeometry(0.62, 3);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const n = 1 + 0.06 * Math.sin(x * 7.1 + z * 3.3) + 0.04 * Math.cos(y * 9.7);
+      pos.setXYZ(i, x * n * 1.15, y * n * 0.55, z * n);
+    }
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, std(0x8c8f93, { roughness: 0.82 }));
+    m.rotation.set(0.35, 0.4, 0.1); g.add(m);
+  } else if (id === 'shard') {
+    const glass = std(0x7fd4ff, { roughness: 0.12, metalness: 0.1, emissive: 0x1d6ea8, emissiveIntensity: 0.55 });
+    [[0, 0.05, 0, 1, 0.1], [0.34, -0.2, 0.1, 0.62, -0.5], [-0.3, -0.25, 0.05, 0.5, 0.45]].forEach(([x, y, z, s, rz]) => {
+      const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.4, 0), glass);
+      c.scale.set(0.5 * s, 1.35 * s, 0.5 * s); c.position.set(x, y, z); c.rotation.z = rz; g.add(c);
+    });
+  } else if (id === 'petal') {
+    const mat = std(0xd9c8ff, { roughness: 0.4, emissive: 0x6a4fc0, emissiveIntensity: 0.35, side: THREE.DoubleSide });
+    for (let i = 0; i < 5; i++) {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 12), mat);
+      p.scale.set(0.55, 0.08, 1); const a = i / 5 * Math.PI * 2;
+      p.position.set(Math.sin(a) * 0.32, 0, Math.cos(a) * 0.32); p.rotation.y = a; p.rotation.x = 0.25;
+      g.add(p);
+    }
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), std(0xffe6a0, { emissive: 0x806020, emissiveIntensity: 0.4 }));
+    core.position.y = 0.06; g.add(core);
+    g.rotation.x = 0.7;
+  } else if (id === 'treat') {
+    const dough = std(0xc98a4a, { roughness: 0.9 });
+    const cookie = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.66, 0.22, 40), dough); g.add(cookie);
+    const top = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.09, 12, 40), std(0xb87838, { roughness: 0.9 }));
+    top.rotation.x = Math.PI / 2; top.position.y = 0.08; g.add(top);
+    [[0.2, 0.15], [-0.25, 0.1], [0.05, -0.3], [-0.1, 0.33], [0.32, -0.18]].forEach(([x, z]) => {
+      const d = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), std(0xa3183a, { roughness: 0.3 }));
+      d.position.set(x, 0.12, z); g.add(d);
+    });
+    g.rotation.x = 0.55;
+  } else if (id === 'tonic') {
+    const pts = [[0, -0.7], [0.36, -0.68], [0.42, -0.5], [0.42, 0.05], [0.2, 0.3], [0.13, 0.42], [0.13, 0.62]]
+      .map(([x, y]) => new THREE.Vector2(x, y));
+    const glass = new THREE.Mesh(new THREE.LatheGeometry(pts, 40),
+      std(0xdff4ff, { roughness: 0.05, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+    g.add(glass);
+    const liquid = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.33, 0.62, 32),
+      std(0x3fcf8e, { roughness: 0.2, emissive: 0x0d5a38, emissiveIntensity: 0.5 }));
+    liquid.position.y = -0.33; g.add(liquid);
+    const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.22, 16), std(0xa37b50, { roughness: 1 }));
+    cork.position.y = 0.7; g.add(cork);
+  } else if (id === 'charm') {
+    const gold = std(0xd9a93a, { roughness: 0.3, metalness: 0.9 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.08, 16, 48), gold); g.add(ring);
+    const loop = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.04, 10, 24), gold); loop.position.y = 0.68; g.add(loop);
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0),
+      std(0x9fe6ff, { roughness: 0.1, emissive: 0x3aa0e0, emissiveIntensity: 0.8 }));
+    gem.scale.y = 1.3; g.add(gem);
+  }
+  return g;
+}
+function bakeBagIcons() {
+  if (bagIcons.done) return;
+  bagIcons.done = true;
+  let r;
+  try {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+    r = new THREE.WebGLRenderer({ canvas: cv, alpha: true, antialias: true, preserveDrawingBuffer: true });
+    r.setPixelRatio(1); r.setSize(128, 128, false);
+    r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.15;
+    const sc = new THREE.Scene();
+    sc.add(new THREE.HemisphereLight(0xeaf6ff, 0x5a4a3a, 1.4));
+    const key = new THREE.DirectionalLight(0xfff1dc, 2.6); key.position.set(2, 3, 3); sc.add(key);
+    const rim = new THREE.DirectionalLight(0x9fc8ff, 1.4); rim.position.set(-3, 1, -2); sc.add(rim);
+    const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 20); cam.position.set(0, 0.45, 3.5); cam.lookAt(0, 0, 0);
+    for (const id of BAG_ORDER) {
+      const m = bagModel(id); m.rotation.y += 0.5;
+      // frame every model the same way, so a small shard fills its tile like a bottle does
+      const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
+      const fit = new THREE.Group(); fit.add(m);
+      m.position.sub(box.getCenter(new THREE.Vector3()));
+      fit.scale.setScalar(1.75 / Math.max(size.x, size.y, size.z * 0.8));
+      sc.add(fit);
+      r.render(sc, cam);
+      bagIcons[id] = cv.toDataURL('image/png');
+      sc.remove(fit);
+      m.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    }
+  } catch (e) { /* no second context available: the Bag falls back to names only */ }
+  if (r) { r.dispose(); r.forceContextLoss(); }
+}
+
+// ---- effects ----
+let tonicLeft = 0;
+// The charm's light exists from the start and is switched by intensity. Adding a light to a
+// running scene changes the light count every material was compiled for, so the first time a
+// child lit the charm the whole world recompiled its shaders -- a visible freeze on a phone.
+const charmLight = new THREE.Group();
+const charmOrb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color: 0xcff0ff }));
+charmOrb.raycast = () => {};
+const charmBulb = new THREE.PointLight(0xbfe6ff, 0, 12, 1.5);
+charmLight.add(charmOrb, charmBulb);
+charmOrb.visible = false;
+scene.add(charmLight);
+function tonicBoost() { return tonicLeft > 0 ? 1.3 : 1; }
+function setCharm(on) {
+  progress.charmOn = !!on;
+  charmOrb.visible = !!on;
+  charmBulb.intensity = on ? 1.6 : 0;
+}
+function bagFrame(dt) {
+  if (tonicLeft > 0) {
+    tonicLeft -= dt;
+    if (tonicLeft <= 0) { tonicLeft = 0; say(L('The Wind Tonic wore off.')); }
+  }
+  if (progress.charmOn) {
+    const t = performance.now() / 1000;
+    charmLight.position.set(
+      player.position.x + Math.sin(t * 1.3) * 0.9,
+      player.position.y + 2.1 + Math.sin(t * 2.2) * 0.15,
+      player.position.z + Math.cos(t * 1.3) * 0.9);
+  }
+}
+if (progress.charmOn && bagCount('charm') > 0) setCharm(true);
+
+function useBagItem(id) {
+  if (bagCount(id) <= 0) return false;
+  if (id === 'treat') {
+    const pet = nearestPet(8) || pets[0];
+    if (!pet) { say(L('You need a buddy nearby to give a treat to.')); chime(300); return false; }
+    bagAdd('treat', -1);
+    pet.happy = Math.min(100, (pet.happy || 60) + 40);
+    pet.careBounce = 1;
+    heartBurst(pet.g.position); chime(1180);
+    grantPetXp(10);
+    say(L('{name} gobbled the Buddy Treat!', { name: pet.name }));
+  } else if (id === 'tonic') {
+    bagAdd('tonic', -1);
+    tonicLeft = 45;
+    burst(player.position.clone().add(new THREE.Vector3(0, 1, 0)), 0x3fcf8e, 18); chime(980);
+    say(L('Wind Tonic! You run faster for 45 seconds.'));
+  } else if (id === 'charm') {
+    setCharm(!progress.charmOn);
+    chime(progress.charmOn ? 1040 : 620);
+    say(progress.charmOn ? L('Your Glow Charm lights the way.') : L('Glow Charm put away.'));
+  } else return false;
+  saveProgress(); renderBag();
+  return true;
+}
+function combine(recipeId) {
+  const r = RECIPES.find(x => x.id === recipeId);
+  if (!r || !canCombine(r)) { chime(300); return false; }
+  for (const k in r.needs) bagAdd(k, -r.needs[k]);
+  bagAdd(r.makes, 1);
+  bagSel = r.makes;
+  chime(880); setTimeout(() => chime(1320), 90);
+  burst(player.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xffe08a, 16);
+  say(L('You made a {item}!', { item: L(BAG_ITEMS[r.makes].name) }));
+  saveProgress(); renderBag();
+  return true;
+}
+
+// ---- panel ----
+let bagSel = null;
+function bagIconEl(id, size) {
+  const src = bagIcons[id];
+  if (!src) { const s = document.createElement('span'); s.className = 'bagNoIcon'; s.textContent = L(BAG_ITEMS[id].name).slice(0, 2); return s; }
+  const im = new Image(size, size); im.src = src; im.alt = ''; im.draggable = false;
+  return im;
+}
+function renderBag() {
+  const grid = $('bagGrid'), det = $('bagDetail'), rec = $('bagRecipes');
+  if (!grid) return;
+  grid.textContent = '';
+  const have = BAG_ORDER.filter(id => bagCount(id) > 0);
+  const empty = $('bagEmpty'); if (empty) empty.hidden = have.length > 0;
+  if (bagSel && bagCount(bagSel) <= 0) bagSel = null;
+  if (!bagSel && have.length) bagSel = have[0];
+  for (const id of have) {
+    const b = document.createElement('button');
+    b.className = 'bagSlot' + (id === bagSel ? ' sel' : '');
+    b.setAttribute('aria-pressed', id === bagSel ? 'true' : 'false');
+    b.setAttribute('aria-label', L(BAG_ITEMS[id].name) + ', ' + bagCount(id));
+    b.dataset.item = id;
+    b.appendChild(bagIconEl(id, 56));
+    const n = document.createElement('b'); n.textContent = bagCount(id); b.appendChild(n);
+    if (id === 'charm' && progress.charmOn) b.classList.add('lit');
+    b.addEventListener('click', () => { bagSel = id; renderBag(); });
+    grid.appendChild(b);
+  }
+  det.textContent = '';
+  if (bagSel) {
+    const it = BAG_ITEMS[bagSel];
+    det.appendChild(bagIconEl(bagSel, 72));
+    const tx = document.createElement('div');
+    const h = document.createElement('h4'); h.textContent = L(it.name) + ' ×' + bagCount(bagSel); tx.appendChild(h);
+    const p = document.createElement('p'); p.textContent = L(it.desc); tx.appendChild(p);
+    if (it.kind !== 'material') {
+      const u = document.createElement('button'); u.className = 'bagUse'; u.id = 'bagUse';
+      u.textContent = it.kind === 'toggle' ? (progress.charmOn ? L('Put away') : L('Light it')) : L('Use');
+      u.addEventListener('click', () => useBagItem(bagSel));
+      tx.appendChild(u);
+    }
+    det.appendChild(tx);
+  }
+  rec.textContent = '';
+  for (const r of RECIPES) {
+    const row = document.createElement('div'); row.className = 'bagRecipe';
+    const ins = document.createElement('div'); ins.className = 'bagIns';
+    for (const k in r.needs) {
+      const c = document.createElement('span');
+      c.className = 'bagNeed' + (bagCount(k) >= r.needs[k] ? '' : ' short');
+      c.title = L(BAG_ITEMS[k].name);
+      c.appendChild(bagIconEl(k, 34));
+      const q = document.createElement('small'); q.textContent = bagCount(k) + '/' + r.needs[k]; c.appendChild(q);
+      ins.appendChild(c);
+    }
+    const arrow = document.createElement('span'); arrow.className = 'bagArrow'; arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = '→';
+    ins.appendChild(arrow);
+    const out = document.createElement('span'); out.className = 'bagNeed'; out.appendChild(bagIconEl(r.makes, 40)); ins.appendChild(out);
+    row.appendChild(ins);
+    const lab = document.createElement('div'); lab.className = 'bagRName'; lab.textContent = L(BAG_ITEMS[r.makes].name); row.appendChild(lab);
+    const go = document.createElement('button'); go.className = 'bagGo'; go.dataset.recipe = r.id;
+    go.textContent = L('Combine'); go.disabled = !canCombine(r);
+    go.addEventListener('click', () => combine(r.id));
+    row.appendChild(go);
+    rec.appendChild(row);
+  }
+}
+function openBag() {
+  bakeBagIcons();
+  if (!settings.tut.bag) { settings.tut.bag = true; saveSettings(); }
+  renderBag();
+  const el = $('bag'); if (el) el.classList.add('on');
+}
+function closeBag() { const el = $('bag'); if (el) el.classList.remove('on'); }
+{
+  const b = $('bagBtn'); if (b) b.addEventListener('click', openBag);
+  const c = $('bagClose'); if (c) c.addEventListener('click', closeBag);
+}
+window.__sky.bag = () => ({
+  open: !!($('bag') && $('bag').classList.contains('on')),
+  items: Object.fromEntries(BAG_ORDER.map(id => [id, bagCount(id)])),
+  recipes: RECIPES.map(r => ({ id: r.id, ready: canCombine(r) })),
+  icons: BAG_ORDER.filter(id => bagIcons[id]).length,
+  tonicLeft: +tonicLeft.toFixed(1), speedBoost: tonicBoost(),
+  charmOn: !!progress.charmOn, charmLit: charmOrb.visible && charmBulb.intensity > 0
+});
+window.__sky.bagGive = (id, n) => { if (!BAG_ITEMS[id]) return false; bagAdd(id, n); saveProgress(); renderBag(); return true; };
+window.__sky.bagPickup = kind => bagOnPickup(kind);
 {
   const b = $('coopBtn'); if (b) b.addEventListener('click', openCoop);
   const c = $('coopClose'); if (c) c.addEventListener('click', closeCoop);
@@ -3861,7 +4212,7 @@ function animate() {
 
     // riding is faster, and a winged buddy is faster still
     const rideBoost = riding ? (riding.wings ? 1.85 : 1.5) : 1;
-    const speed = ((held('sprint') || padSprint) ? SPRINT : WALK) * rideBoost;
+    const speed = ((held('sprint') || padSprint) ? SPRINT : WALK) * rideBoost * tonicBoost();
     const sy = Math.sin(camYaw), cy = Math.cos(camYaw);
     vel.x = (ix * cy - iz * sy) * speed;
     vel.z = (-ix * sy - iz * cy) * speed;
@@ -4104,6 +4455,7 @@ function animate() {
         const seedPay = c.kind === 'petal' ? 5 : c.kind === 'star' ? 2 : c.kind === 'ring' ? 1 : 0;
         if (seedPay) { progress.seeds = (progress.seeds || 0) + seedPay; updateShopHud(); }
         if (c.kind === 'dcrystal') onDungeonCrystal();
+        bagOnPickup(c.kind);
 
         if (navigator.vibrate) navigator.vibrate(12);
         // seeds sometimes hide a berry — food to feed your buddies
@@ -4261,6 +4613,7 @@ function animate() {
   }
 
   coopFrame(dt);
+  bagFrame(dt);
 
   // orbit camera around player using yaw/pitch/distance
   if (started && settings.view === 'fpp') {
