@@ -211,6 +211,59 @@
     position:sticky; bottom:0; min-height:44px;
     box-shadow:0 -10px 16px -8px #fffdf5;
   }
+  /* co-op */
+  #coopBtn {
+    position:fixed; z-index:22; left:12px; top:542px; width:44px; height:44px;
+    border-radius:12px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
+    color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+  }
+  #coopChip {
+    position:fixed; z-index:22; left:62px; top:550px; padding:5px 10px; border-radius:999px;
+    background:rgba(20,35,60,.72); color:#fff; font-size:13px; font-weight:700; pointer-events:none;
+  }
+  #coop {
+    position:fixed; inset:0; z-index:59; display:none; align-items:center; justify-content:center;
+    background:rgba(20,35,60,.45); backdrop-filter:blur(4px);
+  }
+  #coop.on { display:flex; }
+  #coopCard {
+    width:min(92vw,430px); background:#fffdf5; border-radius:20px; padding:22px;
+    color:var(--ink); box-shadow:0 18px 50px rgba(20,40,80,.35); max-height:86vh; overflow-y:auto;
+  }
+  #coopCard h2 { font-size:20px; color:#1d3a5f; margin-bottom:6px; text-align:center; }
+  #coopCard p.sub { font-size:12.5px; color:#5b6b82; text-align:center; margin:0 0 12px; }
+  #coopCard label { display:block; font-size:13px; font-weight:700; color:#1d3a5f; margin:12px 0 5px; }
+  #coopCard input {
+    width:100%; box-sizing:border-box; min-height:44px; padding:8px 12px; border-radius:12px;
+    border:2px solid #c9d6e8; font-size:16px; color:#1d3a5f; background:#fff;
+  }
+  #coopCodeIn { text-transform:uppercase; letter-spacing:4px; font-weight:700; text-align:center; }
+  #coopCard input:focus-visible, #coopCard button:focus-visible, #coopBtn:focus-visible {
+    outline:3px solid #2f7de1; outline-offset:2px;
+  }
+  #coopCard button {
+    min-height:44px; border:0; border-radius:12px; padding:8px 16px; font-weight:700; font-size:15px;
+    cursor:pointer; background:#2f7de1; color:#fff; margin-top:8px; width:100%;
+  }
+  #coopCard button#coopClose, #coopCard button#coopLeave { background:#e8eef7; color:#1d3a5f; }
+  #coopCodeShow {
+    font-size:34px; font-weight:800; letter-spacing:8px; text-align:center; color:#1d3a5f;
+    background:#eef4fb; border-radius:14px; padding:10px; margin:4px 0 10px; user-select:all;
+  }
+  #coopList { list-style:none; padding:0; margin:0 0 8px; }
+  #coopList li { display:flex; justify-content:space-between; gap:10px; padding:8px 10px;
+    border-radius:10px; background:#f2f6fb; margin-bottom:6px; font-size:14px; color:#1d3a5f; }
+  #coopList li span { color:#4a5a72; font-size:13px; }
+  #coopPhrases { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  #coopPhrases .coopPhrase { margin-top:0; background:#ffe9a8; color:#5a3d00; font-size:14px; }
+  #coopErr { color:#b3261e; font-size:13px; min-height:1em; margin:8px 0 0; }
+  #coopStatus { text-align:center; font-size:13.5px; font-weight:700; color:#1d6b3a; margin:10px 0 0; }
+  body.photo #coopBtn, body.photo #coopChip { display:none; }
+  @media (orientation:landscape) and (max-height:520px) {
+    #coopBtn { top:calc(254px + env(safe-area-inset-top)); left:auto; right:calc(16px + env(safe-area-inset-right)); }
+    #coopChip { top:calc(6px + env(safe-area-inset-top)); left:auto; right:calc(150px + env(safe-area-inset-right)); }
+  }
   /* wardrobe */
   #wardrobeBtn {
     position:fixed; z-index:22; left:12px; top:218px; width:44px; height:44px;
@@ -575,6 +628,33 @@
 <button id="shopBtn" aria-label="Seed Shop" data-i18n-aria="Seed Shop">🌰</button>
 <button id="dungeonBtn" aria-label="Sky Rift" data-i18n-aria="Sky Rift">🌀</button>
 <button id="travelBtn" aria-label="Fast travel" data-i18n-aria="Fast travel">🧭</button>
+<button id="coopBtn" aria-label="Play together" data-i18n-aria="Play together">👥</button>
+<div id="coopChip" role="status" aria-live="polite" hidden></div>
+<div id="coop" role="dialog" aria-modal="true" aria-labelledby="coopTitle">
+  <div id="coopCard">
+    <h2 id="coopTitle" data-i18n="Play together">Play together</h2>
+    <p class="sub" data-i18n="COOP_SUB">Make a room and read the code out to your friends, or type a friend's code to join their world.</p>
+    <div id="coopOut">
+      <label for="coopName" data-i18n="Your name in the room">Your name in the room</label>
+      <input id="coopName" maxlength="16" autocomplete="nickname" spellcheck="false">
+      <button id="coopMake" type="button" data-i18n="Make a room">Make a room</button>
+      <label for="coopCodeIn" data-i18n="Friend's room code">Friend's room code</label>
+      <input id="coopCodeIn" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC234">
+      <button id="coopJoin" type="button" data-i18n="Join">Join</button>
+      <p id="coopErr" role="alert"></p>
+    </div>
+    <div id="coopIn" hidden>
+      <p class="sub" data-i18n="Room code">Room code</p>
+      <div id="coopCodeShow"></div>
+      <ul id="coopList"></ul>
+      <div id="coopPhrases" role="group" aria-label="Say something"></div>
+      <button id="coopLeave" type="button" data-i18n="Leave room">Leave room</button>
+    </div>
+    <p id="coopStatus" role="status"></p>
+    <p class="sub" data-i18n="COOP_SAFE">Only people with the code can join. Everything sent is encrypted, and friends can only send the friendly phrases above.</p>
+    <button id="coopClose" type="button" data-i18n="Close (G)">Close (G)</button>
+  </div>
+</div>
 <div id="dungeonHud">
   <span id="dgTier"></span>
   <span><span data-i18n="Sky crystals">Sky crystals</span> <b id="dgCount">0/6</b></span>

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { t as L, setLang, translateDom } from './i18n.js';
+import { CoopRoom, makeCode, normaliseCode } from './coop-net.js';
 
 // ---------- basics ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -2793,6 +2794,20 @@ window.__sky = {
     return n;
   },
   interiorKinds: () => Object.keys(INTERIORS),
+  // co-op: what this player's room looks like from the inside, for the two-browser test
+  coop: () => ({
+    code: coopCode, connected: !!(coopRoom && coopRoom.connected), broker: coopRoom && coopRoom.broker,
+    relays: coopRoom ? [...coopRoom.socks.keys()] : [], log: coopLog.slice(-12),
+    links: coopRoom ? coopRoom.links() : [],
+    friends: [...coopFriends.values()].map(f => ({ name: f.name, outfit: f.outfitId, hat: f.hatId,
+      at: [f.g.position.x, f.g.position.y, f.g.position.z].map(n => +n.toFixed(2)), visible: f.g.parent === scene }))
+  }),
+  coopStart: (code) => coopStart(code),
+  coopChat: (i) => { if (coopRoom) coopRoom.chat(COOP_PHRASES[i]); },
+  coopSay: (text) => { if (coopRoom) coopRoom.chat(text); },
+  coopLeave: () => coopLeave(),
+  lastSaid: () => ($('msg') || {}).textContent,
+  teleport: (x, y, z) => { player.position.set(x, y, z); vel.set(0, 0, 0); camSnap = true; },
   interiorSpec: (k) => INTERIORS[k] || null,
   // the shop the child sees, so a test can hold it against the server's price list
   shopCatalog: () => ({
@@ -2936,7 +2951,7 @@ const DEFAULT_KEYS = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',
   jump: 'Space', sprint: 'ShiftLeft', punch: 'KeyF', interact: 'KeyE',
   pet: 'KeyP', ride: 'KeyR', journal: 'KeyJ', wardrobe: 'KeyK',
-  buddies: 'KeyN', map: 'KeyM', shop: 'KeyT', camLeft: 'KeyQ', view: 'KeyV'
+  buddies: 'KeyN', map: 'KeyM', shop: 'KeyT', camLeft: 'KeyQ', view: 'KeyV', coop: 'KeyG'
 };
 const ALT_KEYS = {
   forward: ['ArrowUp'], back: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
@@ -2986,14 +3001,15 @@ const TAP_ACTIONS = {
   buddies: () => { const bp = $('buddyPanel'); if (bp && bp.classList.contains('on')) closeBuddyPanel(); else openBuddyPanel(); },
   map: () => { const mp = $('mapWrap'); if (mp) mp.classList.toggle('big'); },
   view: () => setViewMode(settings.view === 'fpp' ? 'tpp' : 'fpp'),
-  shop: () => { const sh = $('shop'); if (sh && sh.classList.contains('on')) closeShop(); else openShop(); }
+  shop: () => { const sh = $('shop'); if (sh && sh.classList.contains('on')) closeShop(); else openShop(); },
+  coop: () => { const cp = $('coop'); if (cp && cp.classList.contains('on')) closeCoop(); else openCoop(); }
 };
 // ---- the rebinding panel ----
 const BIND_LABELS = {
   forward: 'Walk forward', back: 'Walk back', left: 'Step left', right: 'Step right',
   jump: 'Jump', sprint: 'Run', punch: 'Pow', interact: 'Talk', pet: 'Pet buddy',
   ride: 'Ride buddy', journal: 'Journal', wardrobe: 'Wardrobe', buddies: 'Buddies',
-  map: 'Map', shop: 'Shop', camLeft: 'Turn camera', view: 'Eyes or camera'
+  map: 'Map', shop: 'Shop', camLeft: 'Turn camera', view: 'Eyes or camera', coop: 'Play together'
 };
 // KeyW reads as gibberish to a seven-year-old; show the letter on the cap instead
 function keyLabel(code) {
@@ -3516,6 +3532,270 @@ function governFps() {
   }
 }
 
+// ---------- real-time co-op ----------
+// Friends meet in a room made from a six-character code. The transport (coop-net.js)
+// carries positions through an encrypted relay and, where the network allows, a direct
+// WebRTC link. This part only draws the friends and runs the little panel.
+//
+// Chat is preset phrases only. A child can never receive free text from anyone: the
+// receiver looks the phrase up in its own list and drops anything that is not on it, so a
+// modified client cannot put words on another child's screen either.
+const COOP_PHRASES = ['Hi!', 'Follow me!', 'Look over here!', 'Thank you!', 'Wait for me!', 'Great job!'];
+const COOP_HAIR = [0xb9a3ff, 0xffb3c7, 0x8fd0f5, 0xffd27a, 0x9fe0b0, 0xc9a27a, 0x6f7bd8, 0xff9f7a];
+const coopFriends = new Map();       // peer id -> friend avatar
+const coopLog = [];                  // connection events, newest last, for the panel and the test
+let coopRoom = null, coopCode = null, coopSentAt = 0, coopLastSent = '', coopLastState = 'idle';
+// Friends are left out of every raycast. The camera's collision ray walks the whole scene,
+// and a Sprite (the name tag) cannot be raycast without raycaster.camera set -- it threw on
+// every frame a friend was near, before the frame could render. A friend should not shove
+// your camera around anyway.
+const COOP_NO_RAY = () => {};
+function coopUnpickable(g) { g.traverse(o => { o.raycast = COOP_NO_RAY; }); }
+
+function coopNameTag(name) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const x = c.getContext('2d');
+  x.font = 'bold 30px system-ui, sans-serif';
+  const w = Math.min(248, x.measureText(name).width + 36);
+  x.fillStyle = 'rgba(20,35,60,.78)';
+  x.beginPath(); x.roundRect((256 - w) / 2, 8, w, 48, 24); x.fill();
+  x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(name, 128, 33);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+  s.scale.set(2.4, 0.6, 1); s.position.y = 3.05; s.renderOrder = 10;
+  return s;
+}
+
+// A friend is a light version of Miru: same proportions, their own hair colour, and the
+// outfit and hat they are actually wearing, built by the same functions as the player's.
+function coopMakeFriend(p) {
+  const g = new THREE.Group();
+  const b = new THREE.Group(); g.add(b);
+  let h = 0; for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const hairMat = new THREE.MeshToonMaterial({ color: COOP_HAIR[h % COOP_HAIR.length] });
+  const hd = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 14), skin);
+  hd.position.y = 1.95; hd.castShadow = true; b.add(hd);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 12), hairMat);
+  hair.position.set(0, 2.02, -0.08); b.add(hair);
+  const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.44, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2.4), hairMat);
+  fringe.position.set(0, 2.05, 0.02); b.add(fringe);
+  for (const sx of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0x2a2f45 }));
+    e.position.set(0.16 * sx, 1.98, 0.37); b.add(e);
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.5, 4, 8), skin);
+    arm.position.set(0.42 * sx, 1.1, 0); arm.rotation.z = 0.35 * sx; b.add(arm);
+  }
+  const tag = coopNameTag(p.name);
+  g.add(tag);
+  const f = { id: p.id, name: p.name, g, body: b, head: hd, tag, target: null, ry: 0,
+    moving: 0, phase: 0, outfitId: null, hatId: null, outfitMesh: null, hatMesh: null };
+  coopUnpickable(g);
+  scene.add(g);
+  return f;
+}
+
+function coopDress(f, outfit, hat) {
+  outfit = WARDROBE.outfit.some(o => o.id === outfit) ? outfit : 'dress';
+  hat = WARDROBE.hat.some(o => o.id === hat) ? hat : 'none';
+  if (f.outfitId !== outfit) {
+    if (f.outfitMesh) f.body.remove(f.outfitMesh);
+    f.outfitMesh = makeOutfit(outfit);
+    f.outfitMesh.scale.setScalar(2.1); f.outfitMesh.position.y = 0.9;
+    f.body.add(f.outfitMesh); f.outfitId = outfit;
+  }
+  if (f.hatId !== hat) {
+    if (f.hatMesh) f.head.remove(f.hatMesh);
+    f.hatMesh = null;
+    if (hat !== 'none') { f.hatMesh = makeHat(hat); f.hatMesh.position.y = 0.36; f.head.add(f.hatMesh); }
+    f.hatId = hat;
+  }
+  coopUnpickable(f.g);
+}
+
+function coopDropFriend(id) {
+  const f = coopFriends.get(id);
+  if (!f) return;
+  scene.remove(f.g);
+  f.g.traverse(o => { if (o.material && o.material.map) o.material.map.dispose(); });
+  coopFriends.delete(id);
+}
+
+function coopOnPeer(p) {
+  if (!p.state) return;
+  const s = p.state;
+  if (![s.x, s.y, s.z, s.r].every(Number.isFinite)) return;
+  let f = coopFriends.get(p.id);
+  if (!f) {
+    f = coopMakeFriend(p);
+    coopFriends.set(p.id, f);
+    f.g.position.set(s.x, s.y, s.z);
+    burst(f.g.position.clone().add(new THREE.Vector3(0, 1.4, 0)), 0x9fe0ff, 16);
+    say(L('{name} joined!', { name: p.name })); chime(990);
+  }
+  f.target = new THREE.Vector3(s.x, s.y, s.z);
+  f.ry = s.r; f.moving = s.m ? 1 : 0;
+  coopDress(f, s.o, s.h);
+  coopRender();
+}
+
+function coopOnLeave(p) {
+  if (coopFriends.has(p.id)) say(L('{name} went home.', { name: p.name }));
+  coopDropFriend(p.id);
+  coopRender();
+}
+
+function coopOnChat(p, text) {
+  if (!COOP_PHRASES.includes(text)) return;       // not a phrase we offer: never shown
+  say(p.name + ': ' + L(text)); chime(1175);
+  const f = coopFriends.get(p.id);
+  if (f) burst(f.g.position.clone().add(new THREE.Vector3(0, 2.6, 0)), 0xffe08a, 8);
+}
+
+function coopOnStatus(state, url) {
+  coopLastState = state;
+  coopLog.push(state + (url ? ' ' + String(url).replace('wss://', '') : ''));
+  if (coopLog.length > 30) coopLog.shift();
+  if (state === 'offline') {
+    const e = $('coopErr');
+    if (e) e.textContent = L("Couldn't reach the co-op relay. The game still works on your own; try again in a moment.");
+    coopRoom = null; coopCode = null;
+  }
+  coopRender();
+}
+
+async function coopStart(code) {
+  const nameIn = $('coopName');
+  const name = ((nameIn && nameIn.value) || serverUser || 'Miru').trim().slice(0, 16) || 'Miru';
+  if (nameIn) { settings.coopName = name; saveSettings(); }
+  if (coopRoom) coopLeave();
+  coopCode = code;
+  coopRoom = new CoopRoom({ onPeer: coopOnPeer, onLeave: coopOnLeave, onStatus: coopOnStatus, onChat: coopOnChat });
+  const e = $('coopErr'); if (e) e.textContent = '';
+  coopRender();
+  const room = coopRoom;
+  const ok = await room.join(code, name);
+  if (ok && room === coopRoom) { say(L('Room {code} is open. Share the code with a friend!', { code })); chime(880); }
+  coopRender();
+  return ok;
+}
+
+function coopLeave() {
+  if (!coopRoom) return;
+  const r = coopRoom; coopRoom = null; coopCode = null;
+  r.onLeave = () => {}; r.onStatus = () => {};
+  r.leave();
+  for (const id of [...coopFriends.keys()]) coopDropFriend(id);
+  coopRender();
+}
+
+function coopFrame(dt) {
+  if (!coopRoom) return;
+  const now = performance.now();
+  const links = coopRoom.peers.size ? [...coopRoom.peers.values()] : [];
+  // direct links get 20 updates a second, the relay 11: enough to look smooth with the
+  // easing below, and gentle on a free public broker
+  const every = links.length && links.every(p => p.via === 'direct') ? 50 : 90;
+  if (coopRoom.connected && now - coopSentAt > every) {
+    const w = progress.wardrobe || {};
+    const s = {
+      x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2),
+      r: +body.rotation.y.toFixed(2), o: w.outfit || 'dress', h: w.hat || 'none', m: running ? 1 : 0
+    };
+    const key = JSON.stringify(s);
+    // an unchanged pose is resent once a second, so a friend who joins late still sees us
+    if (key !== coopLastSent || now - coopSentAt > 1000) {
+      coopRoom.sendState(s); coopLastSent = key; coopSentAt = now;
+    }
+  }
+  const k = 1 - Math.exp(-dt * 12);
+  for (const f of coopFriends.values()) {
+    if (!f.target) continue;
+    // a friend who teleported (fast travel, a doorway) jumps rather than sliding across the sky
+    if (f.g.position.distanceTo(f.target) > 14) f.g.position.copy(f.target);
+    else f.g.position.lerp(f.target, k);
+    let d = f.ry - f.body.rotation.y;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    f.body.rotation.y += d * k;
+    f.phase += dt * 10 * f.moving;
+    f.body.position.y = f.moving ? Math.abs(Math.sin(f.phase)) * 0.12 : f.body.position.y * (1 - k);
+  }
+  if (now - (coopFrame.chipAt || 0) > 1000) { coopFrame.chipAt = now; coopRender(); }
+}
+
+function coopRender() {
+  const inRoom = !!coopRoom;
+  const out = $('coopOut'), inn = $('coopIn'), chip = $('coopChip');
+  if (out) out.hidden = inRoom;
+  if (inn) inn.hidden = !inRoom;
+  const show = $('coopCodeShow'); if (show) show.textContent = coopCode || '';
+  const links = coopRoom ? coopRoom.links() : [];
+  const st = $('coopStatus');
+  if (st) {
+    st.textContent = !coopRoom ? '' :
+      !coopRoom.connected ? L('Connecting…') :
+      links.length ? L('Friends here: {n}', { n: links.length }) : L('Waiting for friends…');
+  }
+  const list = $('coopList');
+  if (list) {
+    list.textContent = '';
+    for (const l of links) {
+      const li = document.createElement('li');
+      const nm = document.createElement('b'); nm.textContent = l.name;
+      const how = document.createElement('span');
+      how.textContent = (l.via === 'direct' ? L('direct link') : L('via relay')) +
+        (l.rtt !== null ? ' · ' + (l.rtt < 10 ? l.rtt.toFixed(1) : Math.round(l.rtt)) + ' ms' : '');
+      li.append(nm, how); list.append(li);
+    }
+  }
+  if (chip) {
+    chip.hidden = !inRoom;
+    if (inRoom) {
+      const best = links.filter(l => l.rtt !== null).sort((a, b) => a.rtt - b.rtt)[0];
+      chip.textContent = '👥 ' + (links.length + 1) + (best ? ' · ' + (best.rtt < 10 ? best.rtt.toFixed(1) : Math.round(best.rtt)) + ' ms' : '');
+    }
+  }
+}
+
+function openCoop() {
+  const n = $('coopName');
+  if (n && !n.value) n.value = settings.coopName || serverUser || '';
+  coopRender();
+  const el = $('coop'); if (el) el.classList.add('on');
+}
+function closeCoop() { const el = $('coop'); if (el) el.classList.remove('on'); }
+{
+  const b = $('coopBtn'); if (b) b.addEventListener('click', openCoop);
+  const c = $('coopClose'); if (c) c.addEventListener('click', closeCoop);
+  const mk = $('coopMake'); if (mk) mk.addEventListener('click', () => coopStart(makeCode()));
+  const jn = $('coopJoin');
+  const tryJoin = () => {
+    const code = normaliseCode(($('coopCodeIn') || {}).value);
+    const e = $('coopErr');
+    if (!code) { if (e) e.textContent = L('That code does not look right. It is 6 letters and numbers.'); return; }
+    coopStart(code);
+  };
+  if (jn) jn.addEventListener('click', tryJoin);
+  const ci = $('coopCodeIn');
+  if (ci) ci.addEventListener('keydown', e => { if (e.key === 'Enter') tryJoin(); });
+  const lv = $('coopLeave'); if (lv) lv.addEventListener('click', coopLeave);
+  const box = $('coopPhrases');
+  if (box) for (const ph of COOP_PHRASES) {
+    const pb = document.createElement('button');
+    pb.type = 'button'; pb.className = 'coopPhrase'; pb.textContent = L(ph);
+    pb.addEventListener('click', () => { if (coopRoom) { coopRoom.chat(ph); say(L('You') + ': ' + L(ph)); } });
+    box.append(pb);
+  }
+  window.addEventListener('pagehide', () => { if (coopRoom) coopRoom.leave(); });
+  // Typing a name or a room code must not also walk Miru around, open the shop on T, or
+  // jump on Space. Every game key handler listens on window, so keys typed into a text
+  // field are stopped here, on document, after the field itself has had them.
+  document.addEventListener('keydown', e => {
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) e.stopPropagation();
+  });
+}
+
 let paused = false;
 
 let capCarry = 0;
@@ -3979,6 +4259,8 @@ function animate() {
     b.pts.material.opacity = Math.max(0, b.life / 0.8);
     if (b.life <= 0) { scene.remove(b.pts); bursts.splice(i, 1); }
   }
+
+  coopFrame(dt);
 
   // orbit camera around player using yaw/pitch/distance
   if (started && settings.view === 'fpp') {

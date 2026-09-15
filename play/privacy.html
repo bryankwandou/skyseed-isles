@@ -40,10 +40,20 @@
     <li><b>Kemajuan permainan</b> — kilau, teman, bangunan, misi, dan pengaturan.</li>
   </ul>
 
+  <h2>Main bersama (hanya jika anak memilihnya)</h2>
+  <p>Fitur “Main bersama” mati sampai anak membuat ruangan atau memasukkan kode ruangan dari teman. Selama di dalam ruangan:</p>
+  <ul>
+    <li><b>Yang dikirim ke teman di ruangan:</b> nama tampilan yang diketik anak untuk ruangan itu, posisi karakter <i>di dalam dunia permainan</i> (bukan lokasi sungguhan), arah hadap, dan pakaian yang dipakai. Tidak ada nama akun, email, atau data lain.</li>
+    <li><b>Tanpa obrolan bebas.</b> Teman hanya bisa mengirim enam kalimat ramah yang sudah disediakan (“Hai!”, “Ikuti aku!”, dan seterusnya). Permainan menolak kalimat lain apa pun, jadi tidak ada orang yang bisa menulis pesan bebas ke layar anak.</li>
+    <li><b>Server perantara.</b> Pesan dikirim lewat server MQTT publik (EMQX, HiveMQ, Mosquitto). Setiap pesan dienkripsi AES-GCM dengan kunci dari kode ruangan, jadi server perantara hanya melihat data acak dan tidak tahu ruangan mana milik siapa.</li>
+    <li><b>Sambungan langsung.</b> Bila jaringan memungkinkan, perangkat anak dan temannya tersambung langsung (WebRTC) agar lebih cepat. Cara ini memperlihatkan alamat IP perangkat kepada teman di ruangan tersebut dan kepada server STUN (Google, Cloudflare) yang membantu menyambungkan.</li>
+    <li>Hanya orang yang diberi kode yang bisa masuk. Keluar dari ruangan atau menutup permainan langsung memutus semuanya.</li>
+  </ul>
+
   <h2>Yang TIDAK kami lakukan</h2>
   <ul>
     <li>Tanpa analitik, tanpa pelacak pihak ketiga, tanpa iklan.</li>
-    <li>Tanpa obrolan, tanpa pesan antar pemain, tanpa data lokasi.</li>
+    <li>Tanpa obrolan bebas dan tanpa data lokasi sungguhan.</li>
     <li>Tidak pernah menjual atau membagikan data ke siapa pun.</li>
   </ul>
 
@@ -55,7 +65,7 @@
 
   <div class="en">
     <h2>English summary</h2>
-    <p>We collect as little as possible and you stay in control. A child can play entirely as a guest, with progress saved only in that device’s browser and sent nowhere. If you choose to make an account (optional, only so progress follows a child across devices), we store a username, an email (used only for account recovery — parent-created child accounts use a placeholder so the child needs no real email), a one-way hashed password nobody can read back, and the game progress itself. No analytics, no third-party trackers, no advertising, no chat, no location data, and we never sell or share data. From the Family dashboard a parent can view each child’s progress, reset passwords, and permanently delete a child’s account and all of its data at any time.</p>
+    <p>We collect as little as possible and you stay in control. A child can play entirely as a guest, with progress saved only in that device’s browser and sent nowhere. If you choose to make an account (optional, only so progress follows a child across devices), we store a username, an email (used only for account recovery — parent-created child accounts use a placeholder so the child needs no real email), a one-way hashed password nobody can read back, and the game progress itself. No analytics, no third-party trackers, no advertising, no free-text chat, no real-world location data, and we never sell or share data. “Play together” stays off until a child makes a room or types a friend’s room code. Inside a room, friends see the display name the child typed for that room, where their character is in the game world, which way it faces, and what it is wearing; friends can send only six preset friendly phrases, and the game refuses anything else. These messages pass through public MQTT relay servers (EMQX, HiveMQ, Mosquitto) encrypted with AES-GCM under a key made from the room code, so the relays see only scrambled bytes. When the network allows, devices connect directly (WebRTC) for speed, which shows each device’s IP address to the friends in that room and to the STUN servers (Google, Cloudflare) that help set up the link. From the Family dashboard a parent can view each child’s progress, reset passwords, and permanently delete a child’s account and all of its data at any time.</p>
   </div>
 
   <a class="back" href="./account.html">← Kembali</a>
