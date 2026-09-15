@@ -264,6 +264,53 @@
     #coopBtn { top:calc(254px + env(safe-area-inset-top)); left:auto; right:calc(16px + env(safe-area-inset-right)); }
     #coopChip { top:calc(6px + env(safe-area-inset-top)); left:auto; right:calc(150px + env(safe-area-inset-right)); }
   }
+  /* bag */
+  #bagBtn {
+    position:fixed; z-index:22; left:12px; top:596px; width:44px; height:44px;
+    border-radius:12px; border:2px solid rgba(255,255,255,.7); background:rgba(255,255,255,.28);
+    color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none;
+  }
+  #bagBtn:focus-visible, #bagCard button:focus-visible { outline:3px solid #2f7de1; outline-offset:2px; }
+  #bag { position:fixed; inset:0; z-index:59; display:none; align-items:center; justify-content:center;
+    background:rgba(20,35,60,.45); backdrop-filter:blur(4px); }
+  #bag.on { display:flex; }
+  #bagCard { width:min(92vw,460px); background:#fffdf5; border-radius:20px; padding:22px; color:var(--ink);
+    box-shadow:0 18px 50px rgba(20,40,80,.35); max-height:88vh; overflow-y:auto; }
+  #bagCard h2 { font-size:20px; color:#1d3a5f; margin-bottom:6px; text-align:center; }
+  #bagCard p.sub { font-size:12.5px; color:#4a5a72; text-align:center; margin-bottom:12px; }
+  #bagCard h3 { font-size:13px; color:#4a5a72; text-transform:uppercase; letter-spacing:.5px; margin:14px 0 7px; }
+  #bagGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(72px,1fr)); gap:8px; }
+  .bagSlot { position:relative; min-height:76px; border-radius:14px; border:2px solid #d8e2ee; cursor:pointer;
+    background:radial-gradient(circle at 50% 40%,#ffffff,#e9eff6); display:flex; align-items:center; justify-content:center; padding:4px; }
+  .bagSlot.sel { border-color:#2f7de1; box-shadow:0 0 0 2px rgba(47,125,225,.25); }
+  .bagSlot.lit { background:radial-gradient(circle at 50% 40%,#e6f7ff,#bfe6ff); }
+  .bagSlot b { position:absolute; right:6px; bottom:3px; font-size:13px; color:#1d3a5f; }
+  .bagSlot img, .bagNeed img, #bagDetail img { display:block; }
+  .bagNoIcon { font-weight:800; color:#1d3a5f; }
+  #bagEmpty { font-size:14px; color:#4a5a72; text-align:center; padding:14px 6px; }
+  #bagDetail { display:flex; gap:12px; align-items:center; margin-top:12px; background:#eef4fb; border-radius:14px; padding:10px 12px; }
+  #bagDetail:empty { display:none; }
+  #bagDetail h4 { font-size:15px; color:#1d3a5f; margin-bottom:2px; }
+  #bagDetail p { font-size:13px; color:#33445c; line-height:1.45; }
+  #bagCard .bagUse, #bagCard .bagGo { min-height:44px; border:0; border-radius:12px; padding:8px 16px; font-weight:700;
+    font-size:14px; cursor:pointer; background:#2f7de1; color:#fff; margin-top:6px; }
+  #bagCard .bagGo:disabled { background:#c9d3df; color:#4a5a72; cursor:not-allowed; }
+  .bagRecipe { display:grid; grid-template-columns:1fr auto; gap:4px 10px; align-items:center;
+    border:1px solid #dfe7f0; border-radius:14px; padding:8px 10px; margin-bottom:8px; }
+  .bagIns { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .bagNeed { display:flex; flex-direction:column; align-items:center; font-size:11.5px; color:#1d6b3a; font-weight:700; }
+  .bagNeed.short { color:#b3261e; }
+  .bagArrow { font-size:18px; color:#4a5a72; margin:0 2px; }
+  .bagRName { grid-column:1; font-size:13px; font-weight:700; color:#1d3a5f; }
+  .bagRecipe .bagGo { grid-column:2; grid-row:1 / span 2; }
+  #bagClose { width:100%; margin-top:14px; border:none; cursor:pointer; color:#fff; font-weight:700; font-size:15px;
+    padding:11px; border-radius:12px; background:linear-gradient(135deg,#8fd0f5,#a06bf0); position:sticky; bottom:0; min-height:44px; }
+  #setPicReset { min-height:40px; padding:6px 14px; border-radius:10px; border:1px solid #c9d6e8; background:#fff; color:#1d3a5f; font-weight:700; cursor:pointer; }
+  body.photo #bagBtn { display:none; }
+  @media (orientation:landscape) and (max-height:520px) {
+    #bagBtn { top:calc(302px + env(safe-area-inset-top)); left:auto; right:calc(16px + env(safe-area-inset-right)); }
+  }
   /* wardrobe */
   #wardrobeBtn {
     position:fixed; z-index:22; left:12px; top:218px; width:44px; height:44px;
@@ -628,6 +675,19 @@
 <button id="shopBtn" aria-label="Seed Shop" data-i18n-aria="Seed Shop">🌰</button>
 <button id="dungeonBtn" aria-label="Sky Rift" data-i18n-aria="Sky Rift">🌀</button>
 <button id="travelBtn" aria-label="Fast travel" data-i18n-aria="Fast travel">🧭</button>
+<button id="bagBtn" aria-label="Bag" data-i18n-aria="Bag">🎒</button>
+<div id="bag" role="dialog" aria-modal="true" aria-labelledby="bagTitle">
+  <div id="bagCard">
+    <h2 id="bagTitle" data-i18n="Bag">Bag</h2>
+    <p class="sub" data-i18n="BAG_SUB">Everything you gather while exploring. Combine materials into things you can use.</p>
+    <div id="bagGrid"></div>
+    <p id="bagEmpty" data-i18n="BAG_EMPTY">Your Bag is empty. Collect seeds, stars, rings and moonpetals to find materials.</p>
+    <div id="bagDetail" aria-live="polite"></div>
+    <h3 data-i18n="Combine">Combine</h3>
+    <div id="bagRecipes"></div>
+    <button id="bagClose" data-i18n="Close (I)">Close (I)</button>
+  </div>
+</div>
 <button id="coopBtn" aria-label="Play together" data-i18n-aria="Play together">👥</button>
 <div id="coopChip" role="status" aria-live="polite" hidden></div>
 <div id="coop" role="dialog" aria-modal="true" aria-labelledby="coopTitle">
@@ -767,11 +827,13 @@
     <div class="setSection" data-i18n="Graphics">Graphics</div>
     <div class="setRow"><label for="setQuality" data-i18n="Quality">Quality</label>
       <select id="setQuality">
-        <option value="potato" data-i18n="Potato">Potato</option>
-        <option value="low" data-i18n="Fast">Fast</option>
-        <option value="medium" data-i18n="Balanced">Balanced</option>
-        <option value="high" data-i18n="Pretty">Pretty</option>
-        <option value="ultra" data-i18n="Ultra">Ultra</option>
+        <option value="potato" data-i18n="Super smooth">Super smooth</option>
+        <option value="low" data-i18n="Smooth">Smooth</option>
+        <option value="medium" data-i18n="Medium">Medium</option>
+        <option value="high" data-i18n="High">High</option>
+        <option value="superhigh" data-i18n="Super high">Super high</option>
+        <option value="ultra" data-i18n="Ultra high">Ultra high</option>
+        <option value="extreme" data-i18n="Extreme">Extreme</option>
         <option value="custom" data-i18n="Custom">Custom</option>
       </select>
     </div>
@@ -799,6 +861,16 @@
         <option value="60">60</option>
       </select>
     </div>
+    <div class="setRow"><label for="setBright" data-i18n="Brightness">Brightness</label>
+      <input id="setBright" type="range" min="0.6" max="1.5" step="0.05" /><span id="setBrightV" class="setVal">100%</span>
+    </div>
+    <div class="setRow"><label for="setCon" data-i18n="Contrast">Contrast</label>
+      <input id="setCon" type="range" min="0.7" max="1.4" step="0.05" /><span id="setConV" class="setVal">100%</span>
+    </div>
+    <div class="setRow"><label for="setSat" data-i18n="Colour">Colour</label>
+      <input id="setSat" type="range" min="0.5" max="1.6" step="0.05" /><span id="setSatV" class="setVal">100%</span>
+    </div>
+    <div class="setRow"><span></span><button id="setPicReset" type="button" data-i18n="Reset picture">Reset picture</button></div>
     <div class="setRow"><label for="setShowFps" data-i18n="Show FPS">Show FPS</label><input id="setShowFps" type="checkbox" /></div>
     <div class="setRow"><label for="setAuto" data-i18n="Auto-adjust for my device">Auto-adjust for my device</label><input id="setAuto" type="checkbox" /></div>
     <div class="setSection" data-i18n="Playing">Playing</div>

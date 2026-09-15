@@ -26,7 +26,7 @@ await set('setAuto', false);
 
 // --- the panel exists and offers a real ladder, not a two-way toggle ---
 const g0 = await gfx();
-ok('five presets offered', g0.presets.length === 5, g0.presets.join('/'));
+ok('seven presets offered', g0.presets.length === 7, g0.presets.join('/'));
 
 // --- each preset must land differently on the renderer itself ---
 const seen = [];
@@ -38,12 +38,12 @@ for (const name of g0.presets) {
   ok('preset ' + name + ' applied', g.quality === name,
     'ratio=' + g.pixelRatio + ' shadows=' + g.shadowsOn + ' fog=' + g.fogFar);
 }
-const potato = seen[0], ultra = seen[4];
+const potato = seen.find(x => x.name === 'potato'), ultra = seen.find(x => x.name === 'ultra');
 ok('potato is lighter than ultra', potato.ratio < ultra.ratio && potato.fog < ultra.fog && potato.fx < ultra.fx,
   'ratio ' + potato.ratio + '->' + ultra.ratio + ', fog ' + potato.fog + '->' + ultra.fog);
 ok('shadows really turn off on potato', potato.shadows === false && ultra.shadows === true);
 ok('ultra uses the bigger shadow map', ultra.map > potato.map || potato.shadows === false, 'map ' + potato.map + '->' + ultra.map);
-ok('every preset is distinct', new Set(seen.map(s => s.ratio + '|' + s.fog + '|' + s.shadows)).size === 5);
+ok('every preset is distinct', new Set(seen.map(s => s.ratio + '|' + s.fog + '|' + s.shadows)).size === 7);
 
 // --- individual dials reach WebGL and flip the label to Custom ---
 await set('setQuality', 'high'); await new Promise(r => setTimeout(r, 200));
