@@ -64,6 +64,27 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 if (NATURAL) { renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08; }
 document.body.appendChild(renderer.domElement);
+// Some tablet GPUs refuse to compile the lit world shaders. When that happens three.js
+// skips every mesh that uses them: the sky, eyes and glows still draw, but islands, trees
+// and the player vanish. Step down one rung and reload -- first to Storybook shading,
+// then with shadows off -- instead of leaving a child looking at an empty sky.
+window.__shaderErrors = [];
+renderer.debug.onShaderError = (gl, program, vs, fs) => {
+  const log = (gl.getProgramInfoLog(program) || '') + (gl.getShaderInfoLog(fs) || '') + (gl.getShaderInfoLog(vs) || '');
+  window.__shaderErrors.push(log.slice(0, 400));
+  console.error('shader failed:', log);
+  let step = 0;
+  try { step = +sessionStorage.getItem('skyseed_gpu_step') || 0; } catch (e) {}
+  if (step >= 2) return;
+  try {
+    const s = JSON.parse(localStorage.getItem('skyseed_settings_v1')) || {};
+    if (NATURAL) s.artStyle = 'storybook';
+    else { s.shadows = 'off'; s.post = 0; }
+    localStorage.setItem('skyseed_settings_v1', JSON.stringify(s));
+    sessionStorage.setItem('skyseed_gpu_step', String(step + 1));
+    location.reload();
+  } catch (e) {}
+};
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8fd0f5);
