@@ -1,7 +1,7 @@
 import puppeteer from 'puppeteer-core';
 
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
-const URL = process.env.TEST_URL || 'http://localhost:5599/play/';
+const URL = process.env.TEST_URL || 'http://127.0.0.1:5610/play/';
 
 const errors = [];
 const logs = [];
@@ -187,8 +187,9 @@ try {
   console.log(logs.slice(-12).join('\n'));
   console.log('--- errors ---');
   console.log(errors.length ? errors.join('\n') : '(none)');
-  const realErrors = errors.filter(e => !e.includes('favicon'));
-  const buddyOk = /friend/.test(buddy); // >=1 buddy present (saved pet loaded, live befriend may add more)
+  // the static test server has no /api -- those 404s are the harness, not the game
+  const realErrors = errors.filter(e => !e.includes('favicon') && !/HTTP404: .*\/api\//.test(e));
+  const buddyOk = /friend|teman/.test(buddy); // >=1 buddy present (saved pet loaded, live befriend may add more)
   const sparkOk = spark === '12';
   const buildOk = paletteOn && buildsCount >= 1 && builtType === 'mushroom' && afterUndo === buildsCount - 1;
   const pauseOk = pauseOn && hasControls && pauseOff;
@@ -197,10 +198,10 @@ try {
   console.log('pause menu OK:', pauseOk);
   const build2Ok = build2.type === 'fence' && build2.rot > 0 && build2.pieces === 9;
   const careOk = /♥|pet+ing|friend|suka|elus/i.test(care.msg || '');
-  // 9 biomes, 12 quests. This read `/ 6` long after the chain grew to twelve, so the
+  // 9 biomes, 20 quests (four chapters). This read `/ 6` long after the chain grew to twelve, so the
   // journal check reported false on every run and nobody looked -- a stale assertion is
   // worse than no assertion, because it makes the real signal look like background noise.
-  const journalOk = journal.on && /\/ 9/.test(journal.biomes) && /\/ 12/.test(journal.quests);
+  const journalOk = journal.on && /\/ 9/.test(journal.biomes) && /\/ 20/.test(journal.quests);
   const pwaOk = pwa.name === 'Skyseed Isles' && pwa.display === 'standalone' && pwa.sw === true;
   const wardrobeOk = wr.on && wr.hats === 4 && wr.capes === 3 && wr.locked > 0 && (!wr.picked || !!wr.saved);
   const rideOk = ride.btnShown && (ride.label === 'RIDE' || ride.label === 'NAIKI') && /riding|menunggangi/i.test(ride.mounted)

@@ -527,6 +527,10 @@
   }
   #dlgName { font-weight:800; color:#a06bf0; font-size:13px; letter-spacing:1px; }
   #dlgText { margin:6px 0 12px; font-size:15px; line-height:1.55; }
+  #dlgHead { margin-top:6px; font-size:17px; font-weight:800; color:#1d3a5f; letter-spacing:.2px; }
+  .jChapter { background:#f3f0fb; border-radius:12px; padding:9px 12px; margin-bottom:7px; }
+  .jChapter h4 { font-size:14px; color:#3d2a73; margin-bottom:2px; }
+  .jChapter p { font-size:13px; color:#33445c; line-height:1.45; }
   #dlgBtn {
     border:none; cursor:pointer; color:#fff; font-weight:700; font-size:14px;
     padding:9px 22px; border-radius:10px; background:linear-gradient(135deg,#ff8fb8,#a06bf0);
@@ -803,6 +807,9 @@
     <div class="jRow"><span data-i18n="Decorations placed">Decorations placed</span><b id="jBuilds">0</b></div>
     <div class="jRow"><span data-i18n="Skykeeper quests">Skykeeper quests</span><b id="jQuests">0</b></div>
     <div class="jRow"><span data-i18n="Rifts cleared">Rifts cleared</span><b id="jRifts">0</b></div>
+    <div class="jRow"><span data-i18n="Places found">Places found</span><b id="jPlaces">0</b></div>
+    <h3 class="jHead"><span data-i18n="The story so far">The story so far</span></h3>
+    <div id="jStory"></div>
     <h3 class="jHead"><span data-i18n="Badges">Badges</span> <b id="jBadgeCount">0 / 0</b></h3>
     <div id="jBadges" role="list"></div>
     <h3 class="jHead"><span data-i18n="Family">Family</span> <b id="jGoalNum"></b></h3>
@@ -815,6 +822,7 @@
 <div id="dialog" role="dialog" aria-label="Skykeeper dialog">
   <div id="dlgCard">
     <div id="dlgName" data-i18n="✦ THE SKYKEEPER">✦ THE SKYKEEPER</div>
+    <div id="dlgHead" hidden></div>
     <div id="dlgText"></div>
     <button id="dlgBtn" data-i18n="Okay!">Okay!</button>
   </div>
@@ -848,7 +856,7 @@
       </select>
     </div>
     <div class="setRow"><label for="setView" data-i18n="See how far">See how far</label>
-      <input id="setView" type="range" min="90" max="320" step="10" /><span id="setViewV" class="setVal">180</span>
+      <input id="setView" type="range" min="90" max="380" step="10" /><span id="setViewV" class="setVal">180</span>
     </div>
     <div class="setRow"><label for="setFx" data-i18n="Sparkles">Sparkles</label>
       <input id="setFx" type="range" min="0" max="1.5" step="0.05" /><span id="setFxV" class="setVal">100%</span>
@@ -860,6 +868,12 @@
         <option value="45">45</option>
         <option value="60">60</option>
       </select>
+    </div>
+    <div class="setRow"><label for="setPost" data-i18n="Cinematic effects">Cinematic effects</label>
+      <select id="setPost"><option value="0" data-i18n="Off">Off</option><option value="1" data-i18n="Glow + smooth edges">Glow + smooth edges</option><option value="2" data-i18n="Full (ambient occlusion)">Full (ambient occlusion)</option></select>
+    </div>
+    <div class="setRow"><label for="setArt" data-i18n="Art style">Art style</label>
+      <select id="setArt"><option value="natural" data-i18n="Natural">Natural</option><option value="storybook" data-i18n="Storybook">Storybook</option></select>
     </div>
     <div class="setRow"><label for="setBright" data-i18n="Brightness">Brightness</label>
       <input id="setBright" type="range" min="0.6" max="1.5" step="0.05" /><span id="setBrightV" class="setVal">100%</span>
