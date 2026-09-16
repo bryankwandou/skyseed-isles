@@ -4851,8 +4851,9 @@ function animate() {
     }
     // gentle day/night: 5-minute cycle, never darker than dusk (kid-safe)
     const dayF = 0.66 + 0.34 * Math.sin(t * Math.PI * 2 / 300);
-    sun.intensity = 2.2 * dayF;
-    hemi.intensity = 0.55 + 0.35 * dayF;
+    // Natural: stronger key light, softer fill, so shapes get real shadow sides instead of flat pastel
+    sun.intensity = (NATURAL ? 2.8 : 2.2) * dayF;
+    hemi.intensity = NATURAL ? 0.4 + 0.25 * dayF : 0.55 + 0.35 * dayF;
 
     // ease sky + fog toward the current biome (dimmed by time of day)
     const bh = biomeFor(player.position.x, player.position.z);
