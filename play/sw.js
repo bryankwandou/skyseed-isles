@@ -1,5 +1,5 @@
 // Skyseed Isles service worker — cache the shell, never cache the API.
-const CACHE = 'skyseed-v4';
+const CACHE = 'skyseed-v5';
 const SHELL = ['./', './index.html', './game.js', './i18n.js', './account.html', './account.js',
   './family.html', './terms.html', './privacy.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png'];
@@ -21,7 +21,8 @@ self.addEventListener('fetch', e => {
   if (url.pathname.startsWith('/api/')) return;          // API always live
   // network-first for shell files (so updates land), cache fallback for offline
   e.respondWith(
-    fetch(e.request).then(res => {
+    // no-cache: always ask the server, so the same link shows the newest build after a reload
+    fetch(e.request, { cache: 'no-cache' }).then(res => {
       if (res.ok && url.origin === location.origin) {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
