@@ -290,9 +290,45 @@ function undergrowth(r, biome, rand) {
     inst.instanceMatrix.needsUpdate = true;
     if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     inst.castShadow = true; inst.receiveShadow = true;
+    inst.userData.prop = 'undergrowth';
     out.push(inst);
   }
   return out;
+}
+
+// A trodden path is the cheapest thing that tells a child somewhere is worth walking to,
+// and the court's approved sample leans on one: flat stones pushed through the undergrowth
+// instead of an unbroken lawn. One instanced mesh, so the whole path is a single draw call.
+function stonePath(r, biome, rand) {
+  const steps = Math.max(6, Math.round(r * 1.5));
+  const geo = new THREE.CylinderGeometry(0.42, 0.46, 0.16, 7);
+  const base = new THREE.Color(biome.dirt).lerp(new THREE.Color(0xcfd6db), 0.55);
+  const inst = new THREE.InstancedMesh(geo, new WorldMat({ color: base, roughness: 0.85, flatShading: true }), steps);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
+  // the path crosses from one rim to the far side and bows sideways on the way, so it never
+  // reads as a ruled line drawn between two points
+  const a0 = rand() * Math.PI * 2, sweep = Math.PI * (0.7 + rand() * 0.6), bow = (rand() - 0.5) * r * 0.5;
+  const ax = Math.cos(a0) * (r - 1.2), az = Math.sin(a0) * (r - 1.2);
+  const bx = Math.cos(a0 + sweep) * (r - 1.2), bz = Math.sin(a0 + sweep) * (r - 1.2);
+  const nx = -(bz - az), nz = bx - ax, nl = Math.hypot(nx, nz) || 1;
+  for (let i = 0; i < steps; i++) {
+    const t = i / (steps - 1), curve = Math.sin(t * Math.PI) * bow;
+    const x = ax + (bx - ax) * t + (nx / nl) * curve + (rand() - 0.5) * 0.35;
+    const z = az + (bz - az) * t + (nz / nl) * curve + (rand() - 0.5) * 0.35;
+    const sc = 0.8 + rand() * 0.5;
+    q.setFromAxisAngle(up, rand() * Math.PI * 2);
+    s.set(sc, 0.7 + rand() * 0.6, sc * (0.85 + rand() * 0.3));
+    p.set(x, 0.06, z);                 // sunk into the grass rather than resting on top of it
+    m.compose(p, q, s);
+    inst.setMatrixAt(i, m);
+    inst.setColorAt(i, c.copy(base).multiplyScalar(0.85 + rand() * 0.3));
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+  inst.receiveShadow = true;
+  inst.userData.prop = 'path';
+  return inst;
 }
 
 function makeIsland(x, y, z, r, biome, rand) {
@@ -339,7 +375,7 @@ function makeIsland(x, y, z, r, biome, rand) {
   inst.instanceMatrix.needsUpdate = true;
   if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
   g.add(inst);
-  if (NATURAL) g.add(...undergrowth(r, biome, rand));
+  if (NATURAL) g.add(stonePath(r, biome, rand), ...undergrowth(r, biome, rand));
   g.position.set(x, y, z);
   scene.add(g);
   // solids: the props a child can bump into or stand on. Kept per-island in world
@@ -362,6 +398,45 @@ function makePillar(isl, ox, oz, h) {
   // A pillar looks like a platform, so it has to behave like one. Children jumped at these
   // and dropped straight through, which is most of what "lantai tembus" was describing.
   isl.solids.push({ x: isl.x + ox, z: isl.z + oz, r: 0.95, top: isl.y + h + 0.5, stand: true });
+}
+
+// The landmark the approved sample is built around: an arch tall enough to spot from the
+// next island over and open enough to walk under. Painted timber, a name plaque and a
+// lantern -- a garden gate, not a monument, and nothing that needs explaining to a child.
+function makeGardenArch(isl, ox, oz, rot = 0) {
+  const g = new THREE.Group();
+  const paint = new WorldMat({ color: 0xd9544d, roughness: 0.7 });
+  const trim = new WorldMat({ color: 0x3f4a55, roughness: 0.6 });
+  const H = 4.4, W = 3.2;
+  for (const side of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, H, 10), paint);
+    post.position.set(side * W / 2, H / 2, 0);
+    post.castShadow = true; post.receiveShadow = true;
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.3, 10), trim);
+    foot.position.set(side * W / 2, 0.15, 0); foot.receiveShadow = true;
+    post.userData.prop = 'archPost';
+    g.add(post, foot);
+    // a post a child can walk into is a post a child must not walk through, so each one
+    // gets a collider in world coordinates with the group's rotation already applied
+    isl.solids.push({
+      x: isl.x + ox + Math.cos(rot) * (side * W / 2),
+      z: isl.z + oz - Math.sin(rot) * (side * W / 2),
+      r: 0.36, top: isl.y + 0.3, stand: false
+    });
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(W + 1.5, 0.3, 0.45), paint);
+  beam.position.y = H - 0.15; beam.castShadow = true;
+  const under = new THREE.Mesh(new THREE.BoxGeometry(W + 0.5, 0.22, 0.35), trim);
+  under.position.y = H - 0.95; under.castShadow = true;
+  const plaque = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.12), trim);
+  plaque.position.set(0, H - 0.55, 0.22);
+  // the lantern keeps the arch readable as a landmark once the day cycle turns over
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.5),
+    new WorldMat({ color: 0xffe9b0, emissive: 0xffc860, emissiveIntensity: 0.8 }));
+  lamp.position.set(0, H - 1.7, 0);
+  g.add(beam, under, plaque, lamp);
+  g.position.set(ox, 0, oz); g.rotation.y = rot;
+  isl.group.add(g);
 }
 
 function makeTree(isl, ox, oz) {
@@ -405,6 +480,7 @@ function makeTree(isl, ox, oz) {
   if (parts.length > 1) parts.forEach(g => g.dispose());
   const canopy = new THREE.Mesh(canopyGeo,
     new WorldMat({ vertexColors: true, roughness: 0.9, flatShading: NATURAL }));
+  canopy.userData.prop = 'canopy';
   canopy.castShadow = true; canopy.receiveShadow = true;
   isl.group.add(canopy);
 
@@ -1252,6 +1328,8 @@ function decorate(isl, rand) {
   if (r > 9 && rand() < 0.3) { const [x, z] = spot(); makeMountain(isl, x, z); }
   if (r > 10 && rand() < 0.14) { const [x, z] = spot(); makeArenaGate(isl, x, z); }
   if (rand() < 0.35) { const [x, z] = spot(); makeFall(isl, x, z); }
+  // an arch marks the roomier islands, and gives the stone path somewhere to lead
+  if (r > 7 && rand() < 0.32) { const [x, z] = spot(); makeGardenArch(isl, x, z, rand() * Math.PI * 2); }
   const seeds = 1 + Math.floor(rand() * 3);
   for (let i = 0; i < seeds; i++) { const [x, z] = spot(); addSeed(isl, x, z); }
   if (rand() < 0.5) { const [x, z] = spot(); addRing(isl, x, z); }
@@ -4569,6 +4647,29 @@ window.__sky.bagGive = (id, n) => { if (!BAG_ITEMS[id]) return false; bagAdd(id,
 window.__sky.bagPickup = kind => bagOnPickup(kind);
 // map and story probes
 window.__sky.region = (x, z) => { const r = regionAt(x, z); return { key: r.key, biome: r.biome.name, name: regionName(r) }; };
+// A census of what is actually standing in the streamed world right now, and how much of it
+// carries a collider. A screenshot can be framed to flatter; these counts cannot, which is
+// why QA gets this rather than another picture.
+window.__sky.props = () => {
+  let stonePaths = 0, archPosts = 0, undergrowth = 0, canopies = 0, solids = 0, standable = 0;
+  for (const isl of islands) {
+    solids += isl.solids.length;
+    standable += isl.solids.filter(s => s.stand).length;
+    isl.group.traverse(o => {
+      const k = o.userData && o.userData.prop;
+      if (k === 'path') stonePaths++;
+      else if (k === 'undergrowth') undergrowth++;
+      else if (k === 'archPost') archPosts++;
+      else if (k === 'canopy') canopies++;
+    });
+  }
+  return {
+    islands: islands.length,
+    stonePaths, undergrowth, trees: canopies,
+    archGates: archPosts / 2,
+    solids, standable
+  };
+};
 window.__sky.continents = n => {
   const out = [];
   for (let cx = -n; cx <= n; cx++) for (let cz = -n; cz <= n; cz++) {
