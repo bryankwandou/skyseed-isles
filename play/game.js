@@ -977,7 +977,8 @@ function applyQuality() {
   }
   const far = Math.min(s.viewDist, fogLimit());
   scene.fog.far = far;
-  scene.fog.near = far * 0.34;
+  // haze starts late: at 0.34 the low presets (far 90) washed everything past 30 m to sky blue
+  scene.fog.near = far * 0.62;
   // the camera has to out-reach the fog or islands get clipped before they fade
   camera.far = Math.max(400, far * 1.5);
   camera.updateProjectionMatrix();
