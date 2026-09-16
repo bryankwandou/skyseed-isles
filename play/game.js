@@ -3,6 +3,58 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { t as L, setLang, translateDom } from './i18n.js';
 import { CoopRoom, makeCode, normaliseCode } from './coop-net.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ---------- art style ----------
+// 'natural' (default): physically based materials, filmic tone mapping, image-based
+// ambient light and surface detail. 'storybook': the original flat toon shading, kept as a
+// choice because some children and some very old devices are better served by it.
+// Read straight from storage because materials are created long before the settings
+// object exists; switching style reloads the page so every material is rebuilt once.
+const ART_STYLE = (() => { try { return (JSON.parse(localStorage.getItem('skyseed_settings_v1')) || {}).artStyle || 'natural'; } catch (e) { return 'natural'; } })();
+const NATURAL = ART_STYLE !== 'storybook';
+class NaturalMaterial extends THREE.MeshStandardMaterial {
+  constructor(p = {}) { super(Object.assign({ roughness: 0.86, metalness: 0 }, p)); }
+}
+const WorldMat = NATURAL ? NaturalMaterial : THREE.MeshToonMaterial;
+// Tileable detail, generated once: greyscale near white so it multiplies a material's own
+// colour instead of replacing it -- one texture serves every biome.
+function detailTex(kind) {
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), rnd = makeRng(kind === 'grass' ? 7 : 13);
+  g.fillStyle = 'rgb(228,228,228)'; g.fillRect(0, 0, S, S);
+  const dab = (x, y, r, v, a) => {
+    // draw wrapped so the tile has no seam
+    for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) {
+      g.beginPath(); g.fillStyle = 'rgba(' + v + ',' + v + ',' + v + ',' + a + ')';
+      g.ellipse(x + ox, y + oy, r, kind === 'rock' ? r * 0.35 : r, 0, 0, 6.283); g.fill();
+    }
+  };
+  if (kind === 'grass') {
+    for (let i = 0; i < 90; i++) dab(rnd() * S, rnd() * S, 12 + rnd() * 30, 175 + (rnd() * 80 | 0), 0.18);
+    for (let i = 0; i < 2600; i++) dab(rnd() * S, rnd() * S, 0.6 + rnd() * 1.6, 140 + (rnd() * 115 | 0), 0.55);
+  } else {
+    for (let i = 0; i < 70; i++) dab(rnd() * S, rnd() * S, 18 + rnd() * 40, 150 + (rnd() * 100 | 0), 0.22);
+    for (let i = 0; i < 1800; i++) dab(rnd() * S, rnd() * S, 0.8 + rnd() * 3, 120 + (rnd() * 130 | 0), 0.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+let grassDetail = null, rockDetail = null;
+function worldDetail() {
+  if (!NATURAL) return;
+  if (!grassDetail) { grassDetail = detailTex('grass'); grassDetail.repeat.set(5, 5); }
+  if (!rockDetail) { rockDetail = detailTex('rock'); rockDetail.repeat.set(4, 2); }
+}
 
 // ---------- basics ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -10,11 +62,20 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+if (NATURAL) { renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08; }
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8fd0f5);
 scene.fog = new THREE.Fog(0xa8ddf8, 60, 180);
+if (NATURAL) {
+  // soft image-based ambient light: surfaces pick up light from every direction, the way
+  // they do outdoors, instead of the single flat ambient term that made everything look pasted
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.3;
+  pm.dispose();
+}
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 400);
 
@@ -33,15 +94,42 @@ scene.add(hemi);
 const skyUniforms = {
   top: { value: new THREE.Color(0x8fd0f5) },
   bottom: { value: new THREE.Color(0xdfeffb) },
-  exponent: { value: 0.9 }
+  exponent: { value: 0.9 },
+  cloud: { value: new THREE.Color(0xffffff) },
+  cloudAmt: { value: NATURAL ? 1 : 0 },
+  time: { value: 0 }
 };
 const skyDome = new THREE.Mesh(
   new THREE.SphereGeometry(320, 24, 16),
   new THREE.ShaderMaterial({
     uniforms: skyUniforms, side: THREE.BackSide, depthWrite: false, fog: false,
+    defines: { NATURAL_SKY: NATURAL ? '1.45' : '1.0' },
     vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: 'uniform vec3 top; uniform vec3 bottom; uniform float exponent; varying vec3 vP;' +
-      'void main(){ float h = normalize(vP).y * 0.5 + 0.5; float m = pow(clamp(h,0.0,1.0), exponent); gl_FragColor = vec4(mix(bottom, top, m), 1.0); }'
+    fragmentShader: 'uniform vec3 top; uniform vec3 bottom; uniform vec3 cloud; uniform float exponent; uniform float cloudAmt; uniform float time; varying vec3 vP;\n' +
+      // Drifting cloud banks, built from layered value noise rather than a texture, so they
+      // never tile and cost nothing to download. Projected onto a flat plane above the world,
+      // which is what makes them stretch and thin out toward the horizon the way real cloud
+      // cover does instead of wrapping around the dome like wallpaper.
+      'float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n' +
+      'float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);\n' +
+      '  return mix(mix(hash(i), hash(i + vec2(1.0,0.0)), u.x), mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), u.x), u.y); }\n' +
+      'float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ v += a * vnoise(p); p *= 2.02; a *= 0.5; } return v; }\n' +
+      'void main(){ vec3 d = normalize(vP); float h = d.y * 0.5 + 0.5; float m = pow(clamp(h,0.0,1.0), exponent);\n' +
+      // One colour pipeline for the sky whether the frame goes straight to screen or through
+      // the effects chain (where OutputPass tone maps and converts the whole frame). Filmic
+      // tone mapping greys out a pastel sky, so the colour is deepened first to land blue.
+      '  vec3 c = mix(bottom, top, m);\n' +
+      '  if (cloudAmt > 0.0 && d.y > 0.02) {\n' +
+      '    vec2 uv = d.xz / d.y * 0.6 + vec2(time * 0.006, time * 0.003);\n' +
+      '    float n = fbm(uv * 1.3);\n' +
+      '    float cov = smoothstep(0.52, 0.78, n) * smoothstep(0.02, 0.22, d.y);\n' +   // fade into the haze at the horizon
+      '    float lit = 0.72 + 0.28 * smoothstep(0.45, 0.85, fbm(uv * 2.6 + 4.0));\n' + // shaded underbellies, bright tops
+      '    c = mix(c, cloud * lit, cov * cloudAmt * 0.92);\n' +
+      '  }\n' +
+      '  gl_FragColor = vec4(pow(c, vec3(NATURAL_SKY)), 1.0);\n' +
+      '#include <tonemapping_fragment>\n' +
+      '#include <colorspace_fragment>\n' +
+      '}'
   })
 );
 skyDome.renderOrder = -1;
@@ -79,7 +167,56 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  sizePost();
 });
+
+// ---------- cinematic post-processing ----------
+// Tier 1: soft bloom on bright things (sun, crystals, lanterns) + SMAA edge smoothing.
+// Tier 2: adds GTAO ground-truth ambient occlusion -- the contact shadow where a tree meets
+// grass or a wall meets a floor, which is most of what makes a scene read as solid.
+// Built only when first asked for, so a phone on Smooth never downloads the work.
+let composer = null, gtaoPass = null, bloomPass = null, smaaPass = null, postTier = 0;
+function buildPost() {
+  const w = innerWidth, h = innerHeight;
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  gtaoPass = new GTAOPass(scene, camera, w, h);
+  gtaoPass.blendIntensity = 0.85;
+  gtaoPass.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1, samples: 12 });
+  composer.addPass(gtaoPass);
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.32, 0.55, 0.92);
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+  smaaPass = new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio());
+  composer.addPass(smaaPass);
+}
+function sizePost() {
+  if (!composer) return;
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(innerWidth, innerHeight);
+}
+function applyPost(tier) {
+  postTier = NATURAL ? (tier | 0) : 0;
+  if (postTier && !composer) {
+    try { buildPost(); } catch (e) { composer = null; postTier = 0; }
+  }
+  if (composer) {
+    gtaoPass.enabled = postTier >= 2;
+    bloomPass.enabled = postTier >= 1;
+    smaaPass.enabled = postTier >= 1;
+    sizePost();
+  }
+}
+// Frame statistics count the WHOLE frame, shadow maps and every effects pass included.
+// Left on automatic, the counters reset per pass, so a post-processed frame reports the cost
+// of its last fullscreen quad (1 triangle) and flatters itself by a factor of a hundred
+// thousand. Anything quoted as a device budget has to be the honest total.
+renderer.info.autoReset = false;
+function drawFrame() {
+  renderer.info.reset();
+  if (postTier && composer) composer.render();
+  else renderer.render(scene, camera);
+}
 
 // ---------- islands ----------
 const islands = []; // live island objects near the player
@@ -87,39 +224,107 @@ const islands = []; // live island objects near the player
 // Biomes ring outward from the origin, so every stretch of exploring shows a
 // visibly new kind of land — the core "endless discovery" hook.
 const BIOMES = [
-  { name: 'Meadow Isles',   grass: 0x6fce4e, tuft: 0x8fe06a, dirt: 0x9a6b4f, leaf: 0xff9ec6, sky: 0x8fd0f5, fog: 0xa8ddf8, root: 220 },
-  { name: 'Sunset Grove',   grass: 0xe0a24e, tuft: 0xf3c06a, dirt: 0x8a5540, leaf: 0xff8f6a, sky: 0xf6c98f, fog: 0xf8dcc0, root: 196 },
-  { name: 'Snow Isles',     grass: 0xdfeaf2, tuft: 0xffffff, dirt: 0x8fa6b9, leaf: 0xbfe0ff, sky: 0xcfe8ff, fog: 0xe6f4ff, root: 247 },
-  { name: 'Starfall Isles', grass: 0x454a7a, tuft: 0x7f88e0, dirt: 0x2a2f45, leaf: 0x9ad0ff, sky: 0x2e3360, fog: 0x3a4070, root: 175 },
-  { name: 'Candy Reef',     grass: 0xff9ec6, tuft: 0xffc2dd, dirt: 0xc06a9a, leaf: 0xa06bf0, sky: 0xffd6ef, fog: 0xffe0f2, root: 262 },
-  { name: 'Desert Dunes',   grass: 0xe8cf8a, tuft: 0xf3e0a8, dirt: 0xc09a5f, leaf: 0x8fce6a, sky: 0xf8e3b8, fog: 0xf6ead0, root: 208 },
-  { name: 'Crystal Caverns',grass: 0x6a5f9a, tuft: 0xa48fe0, dirt: 0x3a3455, leaf: 0x8fd0ff, sky: 0x51487f, fog: 0x655a96, root: 165 },
-  { name: 'Autumn Woods',   grass: 0xd08a4e, tuft: 0xe8a860, dirt: 0x7a4a35, leaf: 0xe85f3f, sky: 0xf0c8a0, fog: 0xf3d8bc, root: 233 },
-  { name: 'Aurora Peaks',   grass: 0xbfeadf, tuft: 0xdffff2, dirt: 0x6f8fa6, leaf: 0x9affd0, sky: 0x9fe8d8, fog: 0xc8f6ea, root: 294 },
+  { name: 'Meadow Isles',   grass: 0x6fce4e, tuft: 0x8fe06a, dirt: 0x9a6b4f, leaf: 0xff9ec6, sky: 0x8fd0f5, fog: 0xa8ddf8, bloom: 0xfff3a0, root: 220 },
+  { name: 'Sunset Grove',   grass: 0xe0a24e, tuft: 0xf3c06a, dirt: 0x8a5540, leaf: 0xff8f6a, sky: 0xf6c98f, fog: 0xf8dcc0, bloom: 0xffd98f, root: 196 },
+  { name: 'Snow Isles',     grass: 0xdfeaf2, tuft: 0xffffff, dirt: 0x8fa6b9, leaf: 0xbfe0ff, sky: 0xcfe8ff, fog: 0xe6f4ff, bloom: 0xdff2ff, root: 247 },
+  { name: 'Starfall Isles', grass: 0x454a7a, tuft: 0x7f88e0, dirt: 0x2a2f45, leaf: 0x9ad0ff, sky: 0x2e3360, fog: 0x3a4070, bloom: 0xc9b8ff, root: 175 },
+  { name: 'Candy Reef',     grass: 0xff9ec6, tuft: 0xffc2dd, dirt: 0xc06a9a, leaf: 0xa06bf0, sky: 0xffd6ef, fog: 0xffe0f2, bloom: 0xfff0f8, root: 262 },
+  { name: 'Desert Dunes',   grass: 0xe8cf8a, tuft: 0xf3e0a8, dirt: 0xc09a5f, leaf: 0x8fce6a, sky: 0xf8e3b8, fog: 0xf6ead0, bloom: 0xffd2a0, root: 208 },
+  { name: 'Crystal Caverns',grass: 0x6a5f9a, tuft: 0xa48fe0, dirt: 0x3a3455, leaf: 0x8fd0ff, sky: 0x51487f, fog: 0x655a96, bloom: 0xb9e8ff, root: 165 },
+  { name: 'Autumn Woods',   grass: 0xd08a4e, tuft: 0xe8a860, dirt: 0x7a4a35, leaf: 0xe85f3f, sky: 0xf0c8a0, fog: 0xf3d8bc, bloom: 0xffd08f, root: 233 },
+  { name: 'Aurora Peaks',   grass: 0xbfeadf, tuft: 0xdffff2, dirt: 0x6f8fa6, leaf: 0x9affd0, sky: 0x9fe8d8, fog: 0xc8f6ea, bloom: 0xe8fff2, root: 294 },
 ];
-function biomeFor(x, z) { return BIOMES[Math.floor(Math.hypot(x, z) / 130) % BIOMES.length]; }
+
+// A floating island's underside, broken up like real rock: more rings, each vertex pushed in or
+// out by a value hashed from its own position (so the duplicated seam vertices move together
+// and no crack opens), with the rim left round so it still meets the grass cap exactly.
+function roughRock(r, rand) {
+  const h = r * 1.6, geo = new THREE.ConeGeometry(r * 0.92, h, 40, 7);
+  const pos = geo.attributes.position, salt = rand() * 1000;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    if (y <= -h / 2 + 1e-4) continue;             // the rim under the grass stays put
+    const k = Math.sin(Math.round(x * 50) * 12.9898 + Math.round(z * 50) * 78.233 + Math.round(y * 50) * 37.719 + salt) * 43758.5453;
+    const n = k - Math.floor(k);
+    const band = 0.12 * Math.sin(y * 1.7 + salt);   // strata: the whole ring bulges a little
+    const f = 0.82 + n * 0.36 + band;
+    pos.setX(i, x * f); pos.setZ(i, z * f);
+    pos.setY(i, y + (n - 0.5) * 0.5);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+// The layer between bare grass and the trees: low shrubs, taller ferns, and flower heads.
+// Real ground is never one height of green, and a floor of single-height blades is the
+// clearest tell of a cheap scene. Three instanced meshes, so the whole layer is three
+// draw calls per island however many plants it holds.
+function undergrowth(r, biome, rand) {
+  const out = [], area = Math.PI * r * r;
+  // Shrubs take the ground's own greens, not the canopy colour -- a pink cherry canopy does
+  // not mean pink bushes underneath. Kept knee-high: anything taller reads as a boulder.
+  const grass = new THREE.Color(biome.grass), tuft = new THREE.Color(biome.tuft);
+  const bush = grass.clone().multiplyScalar(0.72);
+  const layers = [
+    // geometry,                                 count,        colour,  lean, scale range
+    [new THREE.IcosahedronGeometry(0.26, 1), area * 0.09, bush, 0.12, [0.6, 1.15]],
+    [new THREE.ConeGeometry(0.13, 0.95, 4), area * 0.13, tuft.clone().lerp(bush, 0.55), 0.5, [0.55, 1.1]],
+    [new THREE.SphereGeometry(0.075, 6, 5), area * 0.05, new THREE.Color(biome.bloom || 0xffd9ec), 0.1, [0.8, 1.4]]
+  ];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
+  for (const [geo, rawN, col, lean, span] of layers) {
+    const n = Math.max(4, Math.round(rawN));
+    const inst = new THREE.InstancedMesh(geo, new WorldMat({ roughness: 0.92, flatShading: true }), n);
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2, d = Math.sqrt(rand()) * (r - 1);
+      const sc = span[0] + rand() * (span[1] - span[0]);
+      q.setFromAxisAngle(up, rand() * Math.PI * 2);
+      q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), (rand() - 0.5) * lean));
+      s.set(sc, sc * (0.8 + rand() * 0.5), sc);
+      // flower heads ride a little higher, so they read as blooms above the leaves
+      p.set(Math.cos(a) * d, (geo.type === 'SphereGeometry' ? 0.55 : 0.2) * sc, Math.sin(a) * d);
+      m.compose(p, q, s);
+      inst.setMatrixAt(i, m);
+      inst.setColorAt(i, c.copy(col).multiplyScalar(0.82 + rand() * 0.36));
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.castShadow = true; inst.receiveShadow = true;
+    out.push(inst);
+  }
+  return out;
+}
 
 function makeIsland(x, y, z, r, biome, rand) {
   const g = new THREE.Group();
-  const grassMat = new THREE.MeshToonMaterial({ color: biome.grass });
-  const dirtMat = new THREE.MeshToonMaterial({ color: biome.dirt });
-  const tuftMat = new THREE.MeshToonMaterial({ color: biome.tuft });
-  const topGeo = new THREE.CylinderGeometry(r, r * 0.92, 1.2, 24);
+  worldDetail();
+  const grassMat = new WorldMat(NATURAL ? { color: biome.grass, map: grassDetail, roughness: 0.95 } : { color: biome.grass });
+  const dirtMat = new WorldMat(NATURAL ? { color: biome.dirt, map: rockDetail, bumpMap: rockDetail, bumpScale: 2.5, roughness: 0.92 } : { color: biome.dirt });
+  const tuftMat = new WorldMat({ color: biome.tuft });
+  const topGeo = new THREE.CylinderGeometry(r, r * 0.92, 1.2, NATURAL ? 40 : 24);
   const top = new THREE.Mesh(topGeo, grassMat);
   top.position.y = -0.6; top.receiveShadow = true; g.add(top);
-  const rockGeo = new THREE.ConeGeometry(r * 0.92, r * 1.6, 10);
+  const rockGeo = NATURAL ? roughRock(r, rand) : new THREE.ConeGeometry(r * 0.92, r * 1.6, 10);
   const rock = new THREE.Mesh(rockGeo, dirtMat);
   rock.rotation.x = Math.PI; rock.position.y = -1.2 - r * 0.8; g.add(rock);
-  const tuftGeo = new THREE.ConeGeometry(0.16, 0.55, 5);
-  const n = Math.floor(r * r * 0.7);
+  // Thinner blades, many more of them: a field reads as grass by coverage, not by blade size.
+  // One instanced draw call either way, so the density costs vertices and nothing else.
+  const tuftGeo = new THREE.ConeGeometry(NATURAL ? 0.1 : 0.16, NATURAL ? 0.62 : 0.55, NATURAL ? 4 : 5);
+  const n = Math.floor(r * r * (NATURAL ? 3.2 : 0.7));
   const inst = new THREE.InstancedMesh(tuftGeo, tuftMat, n);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0), tuftBase = new THREE.Color(biome.tuft), tuftAlt = new THREE.Color(biome.grass);
   const tc = new THREE.Color();
+  // Grass grows in clumps, not on a lawn grid: pick a clump centre every few blades and
+  // scatter the rest tightly around it, which is what makes a field read as ground cover
+  // rather than as individually placed props.
+  let ca = 0, cd = 0;
   for (let i = 0; i < n; i++) {
-    const a = rand() * Math.PI * 2, d = Math.sqrt(rand()) * (r - 0.6);
+    if (!NATURAL || i % 7 === 0) { ca = rand() * Math.PI * 2; cd = Math.sqrt(rand()) * (r - 0.6); }
+    const spread = NATURAL ? 0.9 : 0;
+    const a = ca + (rand() - 0.5) * spread * 0.5, d = Math.max(0, cd + (rand() - 0.5) * spread);
     // varied height, a slight lean, and random spin so the grass never looks stamped
-    const hs = 0.7 + rand() * 0.9, lean = (rand() - 0.5) * 0.5;
+    const hs = (NATURAL ? 0.85 : 0.7) + rand() * (NATURAL ? 1.15 : 0.9), lean = (rand() - 0.5) * 0.5;
     q.setFromAxisAngle(up, rand() * Math.PI);
     const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), lean);
     q.multiply(tilt);
@@ -134,6 +339,7 @@ function makeIsland(x, y, z, r, biome, rand) {
   inst.instanceMatrix.needsUpdate = true;
   if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
   g.add(inst);
+  if (NATURAL) g.add(...undergrowth(r, biome, rand));
   g.position.set(x, y, z);
   scene.add(g);
   // solids: the props a child can bump into or stand on. Kept per-island in world
@@ -147,7 +353,7 @@ function makeIsland(x, y, z, r, biome, rand) {
 // decorations are children of the island group (local coords) so despawning
 // an island is a single scene.remove + dispose walk.
 function makePillar(isl, ox, oz, h) {
-  const mat = new THREE.MeshToonMaterial({ color: 0xb9c4cf });
+  const mat = new WorldMat({ color: 0xb9c4cf });
   const p = new THREE.Mesh(new THREE.BoxGeometry(1.4, h, 1.4), mat);
   p.position.set(ox, h / 2, oz); p.castShadow = true; p.receiveShadow = true;
   const cap = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.5, 1.9), mat);
@@ -159,19 +365,51 @@ function makePillar(isl, ox, oz, h) {
 }
 
 function makeTree(isl, ox, oz) {
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 8),
-    new THREE.MeshToonMaterial({ color: 0x8a5a3b }));
-  trunk.position.set(ox, 1.1, oz); trunk.castShadow = true;
-  // rounder, fuller canopy from two overlapping blobs instead of one faceted ball
-  const lm = new THREE.MeshToonMaterial({ color: isl.biome.leaf });
-  const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), lm);
-  leaf.position.set(ox, 3.1, oz); leaf.castShadow = true;
-  const leaf2 = new THREE.Mesh(new THREE.IcosahedronGeometry(1.0, 1),
-    new THREE.MeshToonMaterial({ color: new THREE.Color(isl.biome.leaf).multiplyScalar(0.88) }));
-  leaf2.position.set(ox + 0.6, 3.6, oz - 0.4); leaf2.castShadow = true;
-  isl.group.add(trunk, leaf, leaf2);
+  // A tree reads as expensive when the canopy has depth: clusters at different heights and
+  // sizes, lit differently, instead of one ball. Every tree is seeded from its own world
+  // position, so the same tree is the same tree each time its island streams back in.
+  const rnd = makeRng(Math.round((isl.x + ox) * 31 + (isl.z + oz) * 17));
+  const scale = 0.8 + rnd() * 0.7;
+  const th = 2.2 * scale;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22 * scale, 0.4 * scale, th, NATURAL ? 10 : 8),
+    new WorldMat({ color: 0x8a5a3b, roughness: 0.95 }));
+  trunk.position.set(ox, th / 2, oz);
+  trunk.rotation.z = (rnd() - 0.5) * 0.12;          // no two trunks stand perfectly straight
+  trunk.castShadow = true; trunk.receiveShadow = true;
+  isl.group.add(trunk);
+
+  // The canopy is built from six to nine blobs, then merged into ONE mesh with the shading
+  // baked into vertex colours. The depth survives; the cost does not -- a tree is one draw
+  // call, the same as when it was a single ball.
+  const base = new THREE.Color(isl.biome.leaf);
+  const blobs = NATURAL ? 6 + (rnd() * 4 | 0) : 2;
+  const parts = [], tint = new THREE.Color();
+  for (let i = 0; i < blobs; i++) {
+    const t = i / Math.max(1, blobs - 1);
+    const a = rnd() * Math.PI * 2, out = i === 0 ? 0 : (0.5 + rnd() * 0.85) * scale;
+    const rad = (i === 0 ? 1.45 : 0.62 + rnd() * 0.6) * scale;
+    const y = (i === 0 ? 3.05 : 2.6 + rnd() * 1.25 - t * 0.35) * scale;
+    // leaves away from the trunk catch more sky, the inner ones sit in their own shade
+    const shade = 0.78 + (out / scale) * 0.13 + rnd() * 0.12;
+    const geo = new THREE.IcosahedronGeometry(rad, 1);
+    geo.scale(1, 0.82 + rnd() * 0.3, 1);
+    geo.rotateX(rnd() * 3); geo.rotateY(rnd() * 3);
+    geo.translate(ox + Math.cos(a) * out, y, oz + Math.sin(a) * out);
+    tint.copy(base).multiplyScalar(shade);
+    const col = new Float32Array(geo.attributes.position.count * 3);
+    for (let v = 0; v < geo.attributes.position.count; v++) { col[v * 3] = tint.r; col[v * 3 + 1] = tint.g; col[v * 3 + 2] = tint.b; }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    parts.push(geo);
+  }
+  const canopyGeo = parts.length > 1 ? BufferGeometryUtils.mergeGeometries(parts, false) : parts[0];
+  if (parts.length > 1) parts.forEach(g => g.dispose());
+  const canopy = new THREE.Mesh(canopyGeo,
+    new WorldMat({ vertexColors: true, roughness: 0.9, flatShading: NATURAL }));
+  canopy.castShadow = true; canopy.receiveShadow = true;
+  isl.group.add(canopy);
+
   // the trunk stops you; the canopy does not, so a jump still clears the tree
-  isl.solids.push({ x: isl.x + ox, z: isl.z + oz, r: 0.5, top: isl.y + 2.2, stand: false });
+  isl.solids.push({ x: isl.x + ox, z: isl.z + oz, r: 0.5 * scale, top: isl.y + th, stand: false });
 }
 
 // ---------- houses you can actually walk into ----------
@@ -183,9 +421,9 @@ function makeHouse(isl, ox, oz, rot = 0) {
   const g = new THREE.Group();
   g.position.set(ox, 0, oz);
   g.rotation.y = rot;
-  const wallMat = new THREE.MeshToonMaterial({ color: 0xf2e4cf });
-  const roofMat = new THREE.MeshToonMaterial({ color: 0xc4593f });
-  const woodMat = new THREE.MeshToonMaterial({ color: 0x7a4a30 });
+  const wallMat = new WorldMat({ color: 0xf2e4cf });
+  const roofMat = new WorldMat({ color: 0xc4593f });
+  const woodMat = new WorldMat({ color: 0x7a4a30 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3, 4.2), wallMat);
   body.position.y = 1.5; body.castShadow = true; body.receiveShadow = true; g.add(body);
   const roof = new THREE.Mesh(new THREE.ConeGeometry(3.6, 2.1, 4), roofMat);
@@ -202,7 +440,7 @@ function makeHouse(isl, ox, oz, rot = 0) {
   lamp.add(glowSprite(0xffd9a0, 1.6));
   for (const dx of [-1.35, 1.35]) {
     const win = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.15),
-      new THREE.MeshToonMaterial({ color: 0x9ad8ff }));
+      new WorldMat({ color: 0x9ad8ff }));
     win.position.set(dx, 1.9, 2.12); g.add(win);
   }
   isl.group.add(g);
@@ -234,8 +472,8 @@ function addDoor(isl, wx, wz, kind, tag) {
 function makeCaveMouth(isl, ox, oz) {
   const g = new THREE.Group();
   g.position.set(ox, 0, oz);
-  const rockMat = new THREE.MeshToonMaterial({ color: 0x74707e });
-  const mossMat = new THREE.MeshToonMaterial({ color: 0x5f8f52 });
+  const rockMat = new WorldMat({ color: 0x74707e });
+  const mossMat = new WorldMat({ color: 0x5f8f52 });
   // a boulder pile with a dark hole in it, not a decal: the opening is real geometry set
   // back from the rock so it reads as depth from every angle a child will look at it
   for (const [bx, by, bz, br] of [[-1.9, 0.7, 0, 1.5], [1.9, 0.8, 0, 1.6], [0, 2.1, -0.3, 1.9]]) {
@@ -269,8 +507,8 @@ function makeCaveMouth(isl, ox, oz) {
 function makeMountain(isl, ox, oz) {
   const g = new THREE.Group();
   g.position.set(ox, 0, oz);
-  const stoneMat = new THREE.MeshToonMaterial({ color: isl.biome.dirt });
-  const snowMat = new THREE.MeshToonMaterial({ color: 0xeef6ff });
+  const stoneMat = new WorldMat({ color: isl.biome.dirt });
+  const snowMat = new WorldMat({ color: 0xeef6ff });
   const peak = new THREE.Mesh(new THREE.ConeGeometry(4.6, 9.5, 7), stoneMat);
   peak.position.y = 4.75; peak.castShadow = true; peak.receiveShadow = true; g.add(peak);
   const snow = new THREE.Mesh(new THREE.ConeGeometry(1.7, 3.1, 7), snowMat);
@@ -284,7 +522,7 @@ function makeMountain(isl, ox, oz) {
     new THREE.MeshBasicMaterial({ color: 0x100e18 }));
   back.position.set(0, 1.3, 2.2); g.add(back);
   const lintel = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.45, 0.6),
-    new THREE.MeshToonMaterial({ color: 0x8b8478 }));
+    new WorldMat({ color: 0x8b8478 }));
   lintel.position.set(0, 2.75, 3.5); g.add(lintel);
   isl.group.add(g);
   // the mountain body is solid all round except the tunnel mouth on the +z side
@@ -297,8 +535,8 @@ function makeMountain(isl, ox, oz) {
 function makeArenaGate(isl, ox, oz) {
   const g = new THREE.Group();
   g.position.set(ox, 0, oz);
-  const stoneMat = new THREE.MeshToonMaterial({ color: 0xbfae90 });
-  const trimMat = new THREE.MeshToonMaterial({ color: 0xd8a441 });
+  const stoneMat = new WorldMat({ color: 0xbfae90 });
+  const trimMat = new WorldMat({ color: 0xd8a441 });
   for (const px of [-1.9, 1.9]) {
     const col = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.72, 4.4, 12), stoneMat);
     col.position.set(px, 2.2, 0); col.castShadow = true; g.add(col);
@@ -306,7 +544,7 @@ function makeArenaGate(isl, ox, oz) {
     capital.position.set(px, 4.5, 0); g.add(capital);
     // a banner on each post, because a gate with no colour reads as rubble
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 2.1),
-      new THREE.MeshToonMaterial({ color: px < 0 ? 0xe8574a : 0x4a8fe8, side: THREE.DoubleSide }));
+      new WorldMat({ color: px < 0 ? 0xe8574a : 0x4a8fe8, side: THREE.DoubleSide }));
     flag.position.set(px, 3.1, 0.5); g.add(flag);
   }
   const arch = new THREE.Mesh(new THREE.BoxGeometry(5.0, 0.7, 1.1), stoneMat);
@@ -332,7 +570,7 @@ function makeFall(isl, ox, oz) {
   isl.group.add(f);
 }
 
-const cloudMat = new THREE.MeshToonMaterial({ color: 0xffffff });
+const cloudMat = new WorldMat({ color: 0xffffff });
 const clouds = [];
 for (let i = 0; i < 14; i++) {
   const c = new THREE.Group();
@@ -347,10 +585,10 @@ for (let i = 0; i < 14; i++) {
 }
 
 // ---------- character: Miru ----------
-const skin = new THREE.MeshToonMaterial({ color: 0xffe3cf });
-const hairM = new THREE.MeshToonMaterial({ color: 0xb9a3ff });
-const dressM = new THREE.MeshToonMaterial({ color: 0xffffff });
-const dressTrim = new THREE.MeshToonMaterial({ color: 0x7fd4f7 });
+const skin = new WorldMat({ color: 0xffe3cf });
+const hairM = new WorldMat({ color: 0xb9a3ff });
+const dressM = new WorldMat({ color: 0xffffff });
+const dressTrim = new WorldMat({ color: 0x7fd4f7 });
 
 const player = new THREE.Group();
 const body = new THREE.Group();
@@ -392,11 +630,46 @@ const arms = [];
   body.add(pivot); arms.push(pivot);
 });
 const crown = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.05, 6, 16),
-  new THREE.MeshToonMaterial({ color: 0xffc2dd }));
+  new WorldMat({ color: 0xffc2dd }));
 crown.rotation.x = Math.PI / 2.4; crown.position.y = 2.38; body.add(crown);
 
 player.position.set(0, 0, 3);
 scene.add(player);
+
+// A VRM ships with toon (MToon) materials: flat, self-lit, and unaffected by the sun. Against
+// a world lit by real lights and tone mapped, that is exactly what makes a character look
+// pasted on top of the scene rather than standing in it. In Natural mode the avatar's
+// materials are rebuilt as standard ones so she takes the same sunlight, shadow and ambient
+// light as the ground she is walking on -- her textures and colours are carried over
+// unchanged, so she still looks like herself.
+function naturaliseAvatar(root) {
+  const swapped = new Map();
+  root.traverse(o => {
+    if (!o.isMesh || !o.material) return;
+    const conv = m => {
+      if (!m || m.isMeshStandardMaterial) return m;
+      if (swapped.has(m)) return swapped.get(m);
+      const n = new THREE.MeshStandardMaterial({
+        color: m.color ? m.color.clone() : new THREE.Color(0xffffff),
+        map: m.map || null,
+        normalMap: m.normalMap || null,
+        emissive: m.emissive ? m.emissive.clone() : new THREE.Color(0x000000),
+        emissiveMap: m.emissiveMap || null,
+        transparent: !!m.transparent,
+        opacity: m.opacity === undefined ? 1 : m.opacity,
+        alphaTest: m.alphaTest || 0,
+        side: m.side === undefined ? THREE.FrontSide : m.side,
+        // skin and cloth, not plastic: rough enough to stay matte, with a trace of sheen
+        roughness: 0.72, metalness: 0
+      });
+      n.name = m.name;
+      swapped.set(m, n);
+      return n;
+    };
+    o.material = Array.isArray(o.material) ? o.material.map(conv) : conv(o.material);
+  });
+  return swapped.size;
+}
 
 // ---------- VRM anime avatar (replaces the primitive Miru once loaded) ----------
 let vrm = null, vrmBones = null;
@@ -409,7 +682,8 @@ let vrm = null, vrmBones = null;
     VRMUtils.removeUnnecessaryVertices(gltf.scene);
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
     VRMUtils.rotateVRM0(v);
-    v.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    v.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    if (NATURAL) naturaliseAvatar(v.scene);
     body.clear();
     body.add(v.scene);
     v.scene.scale.setScalar(1.55);
@@ -449,7 +723,7 @@ function makeSlime(isl, ox, oz, rand) {
   const shiny = rv < 0.06; // rare golden slime for the Journal
   const col = shiny ? 0xfff2c8 : slimeColors[Math.floor(rv * slimeColors.length)];
   const blob = new THREE.Mesh(new THREE.SphereGeometry(shiny ? 0.62 : 0.55, 14, 12),
-    new THREE.MeshToonMaterial({ color: col }));
+    new WorldMat({ color: col }));
   blob.scale.y = 0.8; blob.castShadow = true; g.add(blob);
   [-1, 1].forEach(s => {
     const e = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8),
@@ -564,7 +838,7 @@ const settings = Object.assign({
   autoAdjust: true, keys: {}, view: 'tpp',
   // picture: applied on top of every preset, so a dim screen or a washed-out projector can
   // be corrected without giving up the quality the device can run
-  brightness: 1, contrastLvl: 1, saturation: 1
+  brightness: 1, contrastLvl: 1, saturation: 1, post: 1
 }, savedSettings);
 setLang(settings.lang);
 translateDom();
@@ -578,14 +852,14 @@ function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringif
 // individual dials below it — pick one and the dials move; move a dial and you are on
 // 'custom', which is the only honest label at that point.
 const QUALITY_PRESETS = {
-  potato: { renderScale: 0.6,  shadows: 'off',   viewDist: 90,  effects: 0.25, fpsCap: 30 },
-  low:    { renderScale: 0.8,  shadows: 'off',   viewDist: 120, effects: 0.5,  fpsCap: 0 },
-  medium: { renderScale: 1,    shadows: 'soft',  viewDist: 150, effects: 0.75, fpsCap: 0 },
-  high:   { renderScale: 1,    shadows: 'soft',  viewDist: 180, effects: 1,    fpsCap: 0 },
-  superhigh: { renderScale: 1.15, shadows: 'sharp', viewDist: 240, effects: 1.2, fpsCap: 0 },
-  ultra:  { renderScale: 1.35, shadows: 'sharp', viewDist: 300, effects: 1.4,  fpsCap: 0 },
+  potato: { renderScale: 0.6,  shadows: 'off',   viewDist: 90,  effects: 0.25, fpsCap: 30, post: 0 },
+  low:    { renderScale: 0.8,  shadows: 'off',   viewDist: 120, effects: 0.5,  fpsCap: 0, post: 0 },
+  medium: { renderScale: 1,    shadows: 'soft',  viewDist: 150, effects: 0.75, fpsCap: 0, post: 0 },
+  high:   { renderScale: 1,    shadows: 'soft',  viewDist: 180, effects: 1,    fpsCap: 0, post: 1 },
+  superhigh: { renderScale: 1.15, shadows: 'sharp', viewDist: 240, effects: 1.2, fpsCap: 0, post: 2 },
+  ultra:  { renderScale: 1.35, shadows: 'sharp', viewDist: 300, effects: 1.4,  fpsCap: 0, post: 2 },
   // for a desktop GPU with headroom: supersampled, the 4096 shadow map, the whole stream
-  extreme: { renderScale: 1.75, shadows: 'sharp', viewDist: 320, effects: 1.5, fpsCap: 0 }
+  extreme: { renderScale: 1.75, shadows: 'sharp', viewDist: 380, effects: 1.5, fpsCap: 0, post: 2 }
 };
 function applyPreset(name) {
   const p = QUALITY_PRESETS[name];
@@ -633,6 +907,7 @@ function applyQuality() {
   camera.updateProjectionMatrix();
   document.body.classList.toggle('showFps', !!s.showFps);
   applyPicture();
+  applyPost(s.post);
   saveSettings();
 }
 // Brightness, contrast and colour as a CSS filter on the canvas: it costs one compositing
@@ -654,6 +929,7 @@ function syncGraphicsUI() {
   set('setView', s.viewDist); txt('setViewV', s.viewDist);
   set('setFx', s.effects); txt('setFxV', Math.round(s.effects * 100) + '%');
   set('setFpsCap', String(s.fpsCap));
+  set('setPost', String(s.post | 0));
   set('setBright', s.brightness); txt('setBrightV', Math.round(s.brightness * 100) + '%');
   set('setCon', s.contrastLvl); txt('setConV', Math.round(s.contrastLvl * 100) + '%');
   set('setSat', s.saturation); txt('setSatV', Math.round(s.saturation * 100) + '%');
@@ -901,11 +1177,54 @@ const CELL = 44;
 // boundary is always hidden in haze instead of appearing in clear air.
 let GEN_R = 3, KEEP_R = 4;
 function streamRadiusFor(viewDist) {
-  return Math.max(3, Math.min(6, Math.round((viewDist + CELL / 2) / CELL)));
+  return Math.max(3, Math.min(8, Math.round((viewDist + CELL / 2) / CELL)));
 }
 // the furthest the fog may reach without exposing the edge of the built world
 function fogLimit() { return GEN_R * CELL - 30; }
 const cells = new Map(); // "cx,cz" -> [island,...]
+// Regions, not rings. Biomes used to be concentric bands 130 units wide, so after nine of
+// them the same sequence came round again in the same order -- the world felt copy-pasted
+// the moment a child noticed. Now the sky is cut into irregular regions around jittered
+// seed points (a Voronoi map). Each region draws its own biome and its own name, so the
+// neighbours of a Snow region are different every time and no two places share a name.
+const REGION = 240;
+const REGION_NAMES = ['Whisperwind', 'Amberfall', 'Silverleaf', 'Hollowmere', 'Lanternreach', 'Mistvale',
+  'Kestrel', 'Driftstone', 'Brightwater', 'Thornberry', 'Cloudmere', 'Old Oak', 'Sunreach', 'Duskfall',
+  'Glimmerwood', 'Harrowgate', 'Bramblecombe', 'Willowmere', 'Cinderpeak', 'Fernhollow', 'Moonwell',
+  'Pebblebrook', 'Starling', 'Tidewater'];
+const REGION_KINDS = [
+  ['Meadows', 'Downs', 'Fields'], ['Grove', 'Orchard', 'Glade'], ['Snowfields', 'Frostreach', 'Icefalls'],
+  ['Starfall', 'Nightfields', 'Skywatch'], ['Reef', 'Shoals', 'Lagoon'], ['Dunes', 'Sands', 'Flats'],
+  ['Caverns', 'Hollows', 'Deeps'], ['Woods', 'Thicket', 'Wildwood'], ['Peaks', 'Heights', 'Crags']
+];
+const regionCache = new Map();
+function regionSeed(gx, gz) {
+  const h = hash2(gx * 31 + 17, gz * 47 - 29);
+  return { x: (gx + 0.2 + 0.6 * ((h & 1023) / 1023)) * REGION, z: (gz + 0.2 + 0.6 * (((h >>> 10) & 1023) / 1023)) * REGION, h };
+}
+function regionAt(x, z) {
+  const gx = Math.floor(x / REGION), gz = Math.floor(z / REGION);
+  let best = null, bd = Infinity;
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+    const s = regionSeed(gx + i, gz + j), d = (s.x - x) ** 2 + (s.z - z) ** 2;
+    if (d < bd) { bd = d; best = [gx + i, gz + j, s.h]; }
+  }
+  const key = best[0] + ',' + best[1];
+  let r = regionCache.get(key);
+  if (!r) {
+    // home is always a meadow: every first minute of the game is tuned for that ground
+    const bi = key === HOME_REGION ? 0 : best[2] % BIOMES.length;
+    const h2 = hash2(best[0] * 7 - 3, best[1] * 13 + 5);
+    r = { key, biome: BIOMES[bi], a: REGION_NAMES[h2 % REGION_NAMES.length], b: REGION_KINDS[bi][(h2 >>> 8) % 3] };
+    regionCache.set(key, r);
+  }
+  return r;
+}
+let HOME_REGION = '';
+HOME_REGION = regionAt(0, 0).key;
+regionCache.clear();
+function regionName(r) { return L('{name} {kind}', { name: r.a, kind: L(r.b) }); }
+function biomeFor(x, z) { return regionAt(x, z).biome; }
 
 function hash2(a, b) {
   let h = ((a | 0) * 374761393 + (b | 0) * 668265263) >>> 0;
@@ -945,12 +1264,12 @@ function decorate(isl, rand) {
 // landmark "Great Tree" wonder island: huge tree, guaranteed rewards
 function makeWonder(isl, rand) {
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.4, 9, 12),
-    new THREE.MeshToonMaterial({ color: 0x7a4a30 }));
+    new WorldMat({ color: 0x7a4a30 }));
   trunk.position.set(0, 4.5, 0); trunk.castShadow = true;
   isl.group.add(trunk);
   // a full, rounded canopy built from many smooth overlapping blobs (not one faceted ball)
-  const leafMat = new THREE.MeshToonMaterial({ color: isl.biome.leaf });
-  const leafMat2 = new THREE.MeshToonMaterial({ color: new THREE.Color(isl.biome.leaf).multiplyScalar(0.86) });
+  const leafMat = new WorldMat({ color: isl.biome.leaf });
+  const leafMat2 = new WorldMat({ color: new THREE.Color(isl.biome.leaf).multiplyScalar(0.86) });
   const blobs = [
     [0, 9.4, 0, 2.7], [1.7, 8.6, 0.6, 2.0], [-1.6, 8.7, -0.5, 2.1],
     [0.5, 8.4, 1.7, 1.9], [-0.6, 8.5, -1.7, 1.9], [0, 10.6, 0, 1.9],
@@ -981,15 +1300,20 @@ function generateCell(cx, cz) {
   }
   // roughly 1 in 23 cells hosts a Great Tree wonder island
   const isWonder = hash2(cx * 7 + 3, cz * 11 - 5) % 23 === 0;
-  const count = isWonder ? 1 : (rand() < 0.68 ? 1 : (rand() < 0.55 ? 0 : 2));
+  // and about 1 in 17 holds a broad continent: centred in its cell (so it can never touch a
+  // neighbour -- 16 + the widest neighbour reach of 24 stays inside the 44-unit cell), and
+  // decorated three times over, so it reads as a place with several things on it.
+  const isContinent = !isWonder && Math.abs(cx) + Math.abs(cz) > 2 && hash2(cx * 19 + 11, cz * 29 - 3) % 17 === 0;
+  const count = (isWonder || isContinent) ? 1 : (rand() < 0.68 ? 1 : (rand() < 0.55 ? 0 : 2));
   for (let i = 0; i < count; i++) {
-    const x = cx * CELL + (rand() - 0.5) * CELL * 0.6;
-    const z = cz * CELL + (rand() - 0.5) * CELL * 0.6;
+    const x = isContinent ? cx * CELL : cx * CELL + (rand() - 0.5) * CELL * 0.6;
+    const z = isContinent ? cz * CELL : cz * CELL + (rand() - 0.5) * CELL * 0.6;
     const y = (rand() - 0.5) * 9;
-    const r = isWonder ? 9 + rand() * 2 : 4 + rand() * 5;
+    const r = isWonder ? 9 + rand() * 2 : isContinent ? 13 + rand() * 3 : 4 + rand() * 5;
     const isl = makeIsland(x, y, z, r, biomeFor(x, z), rand);
     if (isWonder && i === 0) { makeWonder(isl, rand); isl.key = cx + ',' + cz; }
     decorate(isl, rand);
+    if (isContinent) { isl.continent = true; decorate(isl, rand); decorate(isl, rand); }
     // landmarks: a rift gate to enter a dungeon, and a waypoint to travel back to.
     // Both are keyed off the cell hash, so the same cell always holds the same landmark.
     if (i === 0 && !isWonder) {
@@ -1007,7 +1331,7 @@ const gates = [], waypoints = [];
 
 function makeRiftGate(isl) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshToonMaterial({ color: 0x8f7fd0 });
+  const mat = new WorldMat({ color: 0x8f7fd0 });
   const arch = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.28, 8, 24), mat);
   arch.position.y = 2.0; arch.castShadow = true; g.add(arch);
   // The portal reads as a *hole*, not a lamp. An additive disc over the pale daytime sky
@@ -1041,7 +1365,7 @@ function makeRiftGate(isl) {
 
 function makeWaypoint(isl, cx, cz) {
   const g = new THREE.Group();
-  const stone = new THREE.MeshToonMaterial({ color: 0xd9d2c4 });
+  const stone = new WorldMat({ color: 0xd9d2c4 });
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.5, 0.4, 10), stone);
   base.position.y = 0.2; base.receiveShadow = true; g.add(base);
   const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.55, 2.6, 8), stone);
@@ -1118,15 +1442,21 @@ function ensureChunks(px, pz) {
 }
 
 // biome discovery: announce the first time the player sets foot in a new region
-let curBiome = BIOMES[0].name;
+let curRegion = HOME_REGION;
 function checkBiome(x, z) {
-  const b = biomeFor(x, z);
-  if (b.name === curBiome) return;
-  curBiome = b.name;
-  if (!progress.biomes.includes(b.name)) {
-    progress.biomes.push(b.name);
-    say(L('You reached the {biome}!', { biome: b.name }));
-    chime(900); saveProgress();
+  const r = regionAt(x, z);
+  if (r.key === curRegion) return;
+  curRegion = r.key;
+  if (!Array.isArray(progress.regions)) progress.regions = [];
+  const newType = !progress.biomes.includes(r.biome.name);
+  const newPlace = !progress.regions.includes(r.key);
+  if (newType) progress.biomes.push(r.biome.name);
+  if (newPlace) progress.regions.push(r.key);
+  if (newPlace || newType) {
+    say(L('You reached {place}!', { place: regionName(r) }));
+    chime(newType ? 900 : 760); saveProgress();
+  } else {
+    say(L('Back in {place}.', { place: regionName(r) }));
   }
 }
 
@@ -1143,7 +1473,7 @@ function heartBurst(pos) { burst(pos.clone().add(new THREE.Vector3(0, 0.6, 0)), 
 
 function makePet(color, level, name, happy) {
   const g = new THREE.Group();
-  const blob = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 12), new THREE.MeshToonMaterial({ color }));
+  const blob = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 12), new WorldMat({ color }));
   blob.scale.y = 0.82; blob.castShadow = true; g.add(blob);
   [-1, 1].forEach(s => {
     const e = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), new THREE.MeshBasicMaterial({ color: 0x2a2f45 }));
@@ -1186,7 +1516,7 @@ function befriend(slime) {
 function addWings(pet) {
   if (pet.wings) return;
   const w = new THREE.Group();
-  const mat = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+  const mat = new WorldMat({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
   [-1, 1].forEach(s => {
     const wing = new THREE.Mesh(new THREE.CircleGeometry(0.55, 12, 0, Math.PI), mat);
     wing.position.set(0.34 * s, 0.28, -0.16);
@@ -1268,47 +1598,47 @@ const buildMeshes = [];
 function makeBuildMesh(type) {
   const g = new THREE.Group();
   if (type === 'tree') {
-    const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 1.4, 7), new THREE.MeshToonMaterial({ color: 0x8a5a3b }));
+    const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 1.4, 7), new WorldMat({ color: 0x8a5a3b }));
     tr.position.y = 0.7; tr.castShadow = true; g.add(tr);
-    const lf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 0), new THREE.MeshToonMaterial({ color: 0x74c96a }));
+    const lf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 0), new WorldMat({ color: 0x74c96a }));
     lf.position.y = 1.7; lf.castShadow = true; g.add(lf);
   } else if (type === 'flower') {
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), new THREE.MeshToonMaterial({ color: 0x5fae4e }));
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), new WorldMat({ color: 0x5fae4e }));
     st.position.y = 0.35; g.add(st);
-    const petals = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.1, 6, 10), new THREE.MeshToonMaterial({ color: 0xff8fc0 }));
+    const petals = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.1, 6, 10), new WorldMat({ color: 0xff8fc0 }));
     petals.position.y = 0.72; petals.rotation.x = Math.PI / 2; g.add(petals);
-    const mid = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), new THREE.MeshToonMaterial({ color: 0xffe08a }));
+    const mid = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), new WorldMat({ color: 0xffe08a }));
     mid.position.y = 0.72; g.add(mid);
   } else if (type === 'mushroom') {
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 7), new THREE.MeshToonMaterial({ color: 0xf3ead0 }));
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 7), new WorldMat({ color: 0xf3ead0 }));
     st.position.y = 0.25; g.add(st);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8, 0, 6.283, 0, 1.7), new THREE.MeshToonMaterial({ color: 0xe8564f }));
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8, 0, 6.283, 0, 1.7), new WorldMat({ color: 0xe8564f }));
     cap.position.y = 0.5; cap.castShadow = true; g.add(cap);
   } else if (type === 'lantern') {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6), new THREE.MeshToonMaterial({ color: 0x6a5540 }));
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6), new WorldMat({ color: 0x6a5540 }));
     post.position.y = 0.55; g.add(post);
     const glow = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd98a }));
     glow.position.y = 1.15; g.add(glow);
     glow.add(new THREE.PointLight(0xffcf7a, 0.7, 6));
   } else if (type === 'crystal') {
-    const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), new THREE.MeshToonMaterial({ color: 0x8fd0ff }));
+    const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), new WorldMat({ color: 0x8fd0ff }));
     cr.position.y = 0.55; cr.castShadow = true; g.add(cr);
     cr.add(new THREE.PointLight(0x8fd0ff, 0.5, 5));
   } else if (type === 'fence') {
-    const rail = new THREE.MeshToonMaterial({ color: 0xb98a5a });
+    const rail = new WorldMat({ color: 0xb98a5a });
     [-0.45, 0.45].forEach(x => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.8, 0.12), rail); p.position.set(x, 0.4, 0); p.castShadow = true; g.add(p); });
     [0.28, 0.55].forEach(y => { const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.08), rail); b.position.set(0, y, 0); g.add(b); });
   } else if (type === 'bench') {
-    const wood = new THREE.MeshToonMaterial({ color: 0xc98f5a });
+    const wood = new WorldMat({ color: 0xc98f5a });
     const seat = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.45), wood); seat.position.y = 0.45; seat.castShadow = true; g.add(seat);
     const back = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.1), wood); back.position.set(0, 0.7, -0.18); g.add(back);
     [-0.5, 0.5].forEach(x => { const l = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.12), wood); l.position.set(x, 0.22, 0); g.add(l); });
   } else if (type === 'arch') {
-    const stone = new THREE.MeshToonMaterial({ color: 0xd8c8e8 });
+    const stone = new WorldMat({ color: 0xd8c8e8 });
     [-0.7, 0.7].forEach(x => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 1.8, 8), stone); p.position.set(x, 0.9, 0); p.castShadow = true; g.add(p); });
     const top = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.16, 8, 16, Math.PI), stone); top.position.y = 1.8; top.castShadow = true; g.add(top);
   } else { // path
-    const stone = new THREE.MeshToonMaterial({ color: 0xbfc6cf });
+    const stone = new WorldMat({ color: 0xbfc6cf });
     for (let i = 0; i < 3; i++) {
       const s = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.08, 7), stone);
       s.position.set((i - 1) * 0.5, 0.04, 0); g.add(s);
@@ -1512,9 +1842,27 @@ function openJournal() {
   $('jBuilds').textContent = (progress.builds || []).length;
   $('jQuests').textContent = Math.min(progress.quest.i, QUESTS.length) + ' / ' + QUESTS.length;
   const jr = $('jRifts'); if (jr) jr.textContent = progress.dungeonsCleared || 0;
+  const jpl = $('jPlaces'); if (jpl) jpl.textContent = (progress.regions || []).length;
+  renderStory();
   checkBadges(); renderBadges();
   el.classList.add('on');
   loadFamily();
+}
+// the story so far: a chapter appears once it has begun, its summary once it is finished
+function renderStory() {
+  const box = $('jStory'); if (!box) return;
+  box.textContent = '';
+  const at = progress.quest.i;
+  CHAPTERS.forEach((c, n) => {
+    if (at < c.from && !(n === 0)) return;
+    const end = n + 1 < CHAPTERS.length ? CHAPTERS[n + 1].from : QUESTS.length;
+    const item = document.createElement('div'); item.className = 'jChapter';
+    const h = document.createElement('h4'); h.textContent = L(c.title); item.appendChild(h);
+    const p = document.createElement('p');
+    p.textContent = at >= end ? L(c.summary) : L('In progress: {n} of {m} tasks done.', { n: Math.max(0, at - c.from), m: end - c.from });
+    item.appendChild(p);
+    box.appendChild(item);
+  });
 }
 function closeJournal() { const el = $('journal'); if (el) el.classList.remove('on'); }
 const journalBtn = $('journalBtn');
@@ -1526,10 +1874,10 @@ if (journalClose) journalClose.addEventListener('click', closeJournal);
 const skykeeper = new THREE.Group();
 {
   const robe = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.7, 12),
-    new THREE.MeshToonMaterial({ color: 0xe8f2ff }));
+    new WorldMat({ color: 0xe8f2ff }));
   robe.position.y = 0.85; robe.castShadow = true; skykeeper.add(robe);
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 12),
-    new THREE.MeshToonMaterial({ color: 0xffe8d0 }));
+    new WorldMat({ color: 0xffe8d0 }));
   head.position.y = 1.95; skykeeper.add(head);
   const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 8, 20),
     new THREE.MeshBasicMaterial({ color: 0xfff2a0 }));
@@ -1546,7 +1894,9 @@ function qSnapshot() {
     treasures: progress.treasures || 0,
     rifts: progress.dungeonsCleared || 0,
     waypoints: (progress.waypoints || []).length,
-    fed: progress.fed || 0
+    fed: progress.fed || 0,
+    house: qv('house'), cave: qv('cave'), mountain: qv('mountain'), arena: qv('arena'),
+    charm: qc('charm'), treats: progress.treatsGiven || 0, regions: qr()
   };
 }
 const QUESTS = [
@@ -1596,19 +1946,97 @@ const QUESTS = [
     done: 'Depth three, and you walked out. The old gardeners would be proud.', reward: 30,
     prog: b => L('{n}/3 depth', { n: Math.min(3, progress.riftTier || 1) }),
     ok: () => (progress.riftTier || 1) >= 3 },
-  { give: 'Last one, truly. Find 10 moonpetals and the isles will remember your name forever.',
-    done: 'Ten moonpetals. You are a Sky Explorer, and this garden is yours. Thank you, little gardener.', reward: 50,
+  { give: 'The old gardeners marked the safe paths with moonpetals. Find 10, and I will tell you what they were marking.',
+    done: 'Ten moonpetals. They all point the same way, toward the middle of the sky. Toward the Heartseed.', reward: 50,
     prog: () => L('{n}/10 moonpetals', { n: Math.min(10, progress.treasures || 0) }),
     ok: () => (progress.treasures || 0) >= 10 },
+  // ---- Chapter III: The Cracked Heartseed ----
+  { give: 'My apprentice Tovi lived in a cottage much like the ones you pass. Go inside any cottage and look around carefully.',
+    done: 'A letter under the bed, in Tovi\'s writing: "I am going to find out what cracked." So that is where Tovi went.', reward: 25,
+    prog: b => L('{n}/1 cottage', { n: Math.min(1, qv('house') - (b.house || 0)) }),
+    ok: b => qv('house') - (b.house || 0) >= 1 },
+  { give: 'Tovi always started in the caves. Walk into a cave and read the walls.',
+    done: 'Carvings of a seed with a line through it, and a small arrow. Tovi was here, and Tovi was not lost yet.', reward: 25,
+    prog: b => L('{n}/1 cave', { n: Math.min(1, qv('cave') - (b.cave || 0)) }),
+    ok: b => qv('cave') - (b.cave || 0) >= 1 },
+  { give: 'The deep places are dark. Combine two Sky Shards and a Moonpetal into a Glow Charm. Open your Bag with I.',
+    done: 'Now you carry your own light. Tovi made one just like it, the night before leaving.', reward: 25,
+    prog: b => L('{n}/1 Glow Charm', { n: Math.min(1, qc('charm') - (b.charm || 0)) }),
+    ok: b => qc('charm') - (b.charm || 0) >= 1 },
+  { give: 'From a mountain you can see where the wind has been. Climb inside a mountain, all the way up.',
+    done: 'Scratched into the summit stone: three arrows, pointing at an old arena. Tovi wanted to be followed.', reward: 30,
+    prog: b => L('{n}/1 mountain', { n: Math.min(1, qv('mountain') - (b.mountain || 0)) }),
+    ok: b => qv('mountain') - (b.mountain || 0) >= 1 },
+  { give: 'The arenas are where the old gardeners practised standing firm against the storms. Step inside one.',
+    done: 'Tovi\'s blue scarf, tied to the gate so it would not blow away. A message: "The shards fell far. Bring them home."', reward: 30,
+    prog: b => L('{n}/1 arena', { n: Math.min(1, qv('arena') - (b.arena || 0)) }),
+    ok: b => qv('arena') - (b.arena || 0) >= 1 },
+  // ---- Chapter IV: The Long Way Home ----
+  { give: 'The Heartseed shattered across the whole sky. Travel through 4 places you have never been.',
+    done: 'Four new places, and in every one the wind turns a little toward home. The shards want to come back.', reward: 35,
+    prog: b => L('{n}/4 new places', { n: Math.min(4, qr() - (b.regions || 0)) }),
+    ok: b => qr() - (b.regions || 0) >= 4 },
+  { give: 'Buddies can smell a Heartseed shard from very far away. Make a Buddy Treat and give it to one of them.',
+    done: 'Did you see how their ears went up? They know where the shards are. Follow them, and gather what you find.', reward: 35,
+    prog: b => L('{n}/1 treat given', { n: Math.min(1, (progress.treatsGiven || 0) - (b.treats || 0)) }),
+    ok: b => (progress.treatsGiven || 0) - (b.treats || 0) >= 1 },
+  { give: 'Bring me 6 Sky Shards. They are pieces of the Heartseed, and together they are enough to mend it.',
+    done: 'Six shards. Hold them together, like this.', reward: 80,
+    take: () => bagAdd('shard', -6),
+    after: [
+      'The shards glow, and click together into a seed the size of your hand. Far below, the isles stop drifting.',
+      'And look who is climbing the path. A blue scarf. Tovi followed the same light you did, all the way back.',
+      'Tovi says: "I only found the way. You brought it home." The garden is whole again, gardener. It is yours to keep.'
+    ],
+    prog: () => L('{n}/6 Sky Shards', { n: Math.min(6, bagCount('shard')) }),
+    ok: () => bagCount('shard') >= 6 },
 ];
+// Chapters give the quest list a shape a child can retell: each opens with a short scene
+// the first time its first quest is offered, and the journal keeps the story so far.
+const CHAPTERS = [
+  { from: 0, title: 'Chapter I · The Drifting Isles',
+    intro: ['Long ago a single seed grew at the centre of the sky, and its roots held every island in place. We called it the Heartseed.',
+      'One stormy night it cracked. Since then the isles have been drifting apart, a little more each year. I am the last Skykeeper, and I need a gardener.'],
+    summary: 'A storm cracked the Heartseed, and the isles began to drift. The Skykeeper asked Miru to help hold them together.' },
+  { from: 6, title: 'Chapter II · Beneath the Sky',
+    intro: ['You have steadied the near isles. But the cracks go deeper than the grass.',
+      'Rifts have opened under the islands, and the old paths are overgrown. The old gardeners left signs for anyone brave enough to follow them.'],
+    summary: 'Miru went down into the rifts, woke the standing stones, and followed the moonpetals the old gardeners left behind.' },
+  { from: 12, title: 'Chapter III · The Cracked Heartseed',
+    intro: ['I have not told you everything. I once had an apprentice, Tovi, who went looking for the Heartseed and did not come back.',
+      'Tovi was careful, and Tovi always left a trail. If anyone can find it, it is you.'],
+    summary: 'Miru followed Tovi\'s trail through a cottage, a cave, a mountain and an arena, and learned that the Heartseed\'s shards had fallen far away.' },
+  { from: 17, title: 'Chapter IV · The Long Way Home',
+    intro: ['The shards are scattered across the whole sky, in places no map has names for yet.',
+      'This is the longest journey of all. Take your buddies. Take your light.'],
+    summary: 'Miru crossed the sky, gathered the shards, and mended the Heartseed. Tovi came home.' }
+];
+function qv(kind) { return (progress.visits && progress.visits[kind]) || 0; }
+function qc(item) { return (progress.crafted && progress.crafted[item]) || 0; }
+function qr() { return (progress.regions || []).length; }
 
-function showDialog(text) {
-  const d = $('dialog'); if (!d) { say(text); return; }
-  $('dlgText').textContent = text;
+// A page is a string, or { head, text } for a chapter title card. Several pages play one
+// after another behind a Next button, so a scene can breathe instead of arriving as a wall.
+let dlgQueue = [];
+function showDialog(pages) {
+  dlgQueue = (Array.isArray(pages) ? pages : [pages]).filter(Boolean);
+  nextDialog();
+}
+function nextDialog() {
+  const d = $('dialog');
+  if (!d) { say(dlgQueue.map(p => p.text || p).join(' ')); dlgQueue = []; return; }
+  const page = dlgQueue.shift();
+  const head = $('dlgHead');
+  if (head) { head.textContent = page.head || ''; head.hidden = !page.head; }
+  $('dlgText').textContent = page.text || page;
+  const btn = $('dlgBtn');
+  if (btn) btn.textContent = dlgQueue.length ? L('Next') : L('Okay!');
   d.classList.add('on');
 }
 const dlgBtn = $('dlgBtn');
-if (dlgBtn) dlgBtn.addEventListener('click', () => $('dialog').classList.remove('on'));
+if (dlgBtn) dlgBtn.addEventListener('click', () => {
+  if (dlgQueue.length) { nextDialog(); chime(740); } else $('dialog').classList.remove('on');
+});
 
 function questLine() {
   const q = progress.quest;
@@ -1631,9 +2059,13 @@ function talkSkykeeper() {
   const Q = QUESTS[q.i];
   if (!q.base) {
     q.base = qSnapshot();
-    showDialog(L(Q.give));
+    const ch = CHAPTERS.find(c => c.from === q.i);
+    const pages = ch ? ch.intro.map((t, n) => ({ head: n === 0 ? L(ch.title) : '', text: L(t) })) : [];
+    pages.push(L(Q.give));
+    showDialog(pages);
   } else if (Q.ok(q.base)) {
-    showDialog(L(Q.done) + L(' (+{n} sparks)', { n: Q.reward }));
+    if (Q.take) Q.take();
+    showDialog([L(Q.done) + L(' (+{n} sparks)', { n: Q.reward }), ...(Q.after || []).map(t => L(t))]);
     q.i++; q.base = null;
     addSparks(Q.reward);
     burst(skykeeper.position.clone().add(new THREE.Vector3(0, 2, 0)), 0xfff2a0, 24);
@@ -1835,9 +2267,9 @@ function makeOutfit(id) {
     comet:   { body: 0x5f6f9f, skirt: 0x46527a, trim: 0xa8d8ff }
   }[id] || { body: 0x7fb0e8, skirt: 0x6a9fe0, trim: 0xffffff };
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshToonMaterial({ color: palette.body });
-  const skirtMat = new THREE.MeshToonMaterial({ color: palette.skirt, side: THREE.DoubleSide });
-  const trimMat = new THREE.MeshToonMaterial({ color: palette.trim });
+  const bodyMat = new WorldMat({ color: palette.body });
+  const skirtMat = new WorldMat({ color: palette.skirt, side: THREE.DoubleSide });
+  const trimMat = new WorldMat({ color: palette.trim });
   // bodice: upper chest down to waist (wide/tall enough to fully hide the base top)
   const bodice = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.14, 0.46, 18), bodyMat);
   bodice.position.y = 0.20; g.add(bodice);
@@ -1871,24 +2303,24 @@ function makeOutfit(id) {
 function makeHat(id) {
   const g = new THREE.Group();
   if (id === 'flower') {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.05, 6, 16), new THREE.MeshToonMaterial({ color: 0x7fd86a }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.05, 6, 16), new WorldMat({ color: 0x7fd86a }));
     ring.rotation.x = Math.PI / 2; g.add(ring);
     for (let i = 0; i < 6; i++) {
       const p = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8),
-        new THREE.MeshToonMaterial({ color: [0xff8fc0, 0xffe08a, 0xffffff][i % 3] }));
+        new WorldMat({ color: [0xff8fc0, 0xffe08a, 0xffffff][i % 3] }));
       const a = i / 6 * Math.PI * 2;
       p.position.set(Math.cos(a) * 0.34, 0.03, Math.sin(a) * 0.34); g.add(p);
     }
   } else if (id === 'star') {
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 10), new THREE.MeshToonMaterial({ color: 0x6a7ae0 }));
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 10), new WorldMat({ color: 0x6a7ae0 }));
     cap.position.y = 0.25; g.add(cap);
     const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }));
     st.position.y = 0.58; g.add(st);
     st.add(new THREE.PointLight(0xfff2a0, 0.5, 3));
   } else { // party
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.55, 12), new THREE.MeshToonMaterial({ color: 0xff7ab0 }));
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.55, 12), new WorldMat({ color: 0xff7ab0 }));
     cone.position.y = 0.28; g.add(cone);
-    const pom = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), new THREE.MeshToonMaterial({ color: 0xfff2c0 }));
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), new WorldMat({ color: 0xfff2c0 }));
     pom.position.y = 0.58; g.add(pom);
   }
   return g;
@@ -1899,7 +2331,7 @@ function makeCape(id) {
   const col = id === 'sky' ? 0x8fd0f5 : 0x4a4f8f;
   const cape = new THREE.Mesh(
     new THREE.ConeGeometry(0.5, 1.15, 12, 1, true, Math.PI * 0.25, Math.PI * 1.5),
-    new THREE.MeshToonMaterial({ color: col, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
+    new WorldMat({ color: col, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
   );
   cape.position.y = -0.42; g.add(cape);
   if (id === 'star') {
@@ -2267,8 +2699,8 @@ function buildDungeon(plan) {
   // each tier gets its own palette so deeper runs read as a different place
   const tone = [0x6a5f9a, 0x5f7a9a, 0x7a5f8a, 0x5f9a7a, 0x9a6f5f][plan.tier - 1];
   const trim = [0x8f7fd0, 0x7fa8d0, 0xb07fc0, 0x7fd0a8, 0xd0a07f][plan.tier - 1];
-  const floorMat = new THREE.MeshToonMaterial({ color: tone });
-  const rimMat = new THREE.MeshToonMaterial({ color: trim });
+  const floorMat = new WorldMat({ color: tone });
+  const rimMat = new WorldMat({ color: trim });
   const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 0.9, 1.2, 32), floorMat);
   floor.position.y = -0.6; floor.receiveShadow = true; g.add(floor);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.5, 8, 40), rimMat);
@@ -2278,7 +2710,7 @@ function buildDungeon(plan) {
   // Open-topped and rendered from the inside, so the camera still looks down into the room.
   const wall = new THREE.Mesh(
     new THREE.CylinderGeometry(R + 0.5, R + 0.5, 9, 32, 1, true),
-    new THREE.MeshToonMaterial({ color: tone, side: THREE.BackSide }));
+    new WorldMat({ color: tone, side: THREE.BackSide }));
   wall.position.y = 4.2; g.add(wall);
   // a glowing core in the middle so the room always has a warm focal point
   const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1),
@@ -2346,15 +2778,15 @@ const INTERIORS = {
 
 // ---- the cottage: a hearth, a bed, a table ----
 function furnishHouse(g, R, solid) {
-  const floorMat = new THREE.MeshToonMaterial({ color: 0x9a7350 });
-  const wallMat = new THREE.MeshToonMaterial({ color: 0xf6ead5, side: THREE.BackSide });
-  const woodMat = new THREE.MeshToonMaterial({ color: 0x7a4a30 });
+  const floorMat = new WorldMat({ color: 0x9a7350 });
+  const wallMat = new WorldMat({ color: 0xf6ead5, side: THREE.BackSide });
+  const woodMat = new WorldMat({ color: 0x7a4a30 });
   const floor = new THREE.Mesh(new THREE.BoxGeometry(R * 2, 0.6, R * 2), floorMat);
   floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
   const walls = new THREE.Mesh(new THREE.BoxGeometry(R * 2, 6, R * 2), wallMat);
   walls.position.y = 2.7; g.add(walls);
   const hearth = new THREE.Mesh(new THREE.BoxGeometry(2, 1.4, 0.8),
-    new THREE.MeshToonMaterial({ color: 0x8a8f96 }));
+    new WorldMat({ color: 0x8a8f96 }));
   hearth.position.set(0, 0.7, -R + 0.5); g.add(hearth);
   const fire = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 0),
     new THREE.MeshBasicMaterial({ color: 0xffa34a }));
@@ -2366,13 +2798,13 @@ function furnishHouse(g, R, solid) {
   const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.95, 8), woodMat);
   leg.position.set(1.6, 0.47, 1.2); g.add(leg);
   const bed = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 2.6),
-    new THREE.MeshToonMaterial({ color: 0xd8e6f2 }));
+    new WorldMat({ color: 0xd8e6f2 }));
   bed.position.set(-3.2, 0.25, -0.6); bed.castShadow = true; g.add(bed);
   const quilt = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.22, 1.5),
-    new THREE.MeshToonMaterial({ color: 0xff9ec6 }));
+    new WorldMat({ color: 0xff9ec6 }));
   quilt.position.set(-3.2, 0.58, 0.1); g.add(quilt);
   const rug = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 0.05, 20),
-    new THREE.MeshToonMaterial({ color: 0xa06bf0 }));
+    new WorldMat({ color: 0xa06bf0 }));
   rug.position.set(0, 0.03, 0.8); g.add(rug);
   g.add(new THREE.HemisphereLight(0xfff0d8, 0x6a5340, 0.85));
   solid(1.6, 1.2, 1.15, 1.03, true);
@@ -2382,14 +2814,14 @@ function furnishHouse(g, R, solid) {
 
 // ---- the cave: stalagmites you walk around, crystals that light the room ----
 function furnishCave(g, R, solid) {
-  const rockMat = new THREE.MeshToonMaterial({ color: 0x4a4358 });
-  const floorMat = new THREE.MeshToonMaterial({ color: 0x3a3348 });
+  const rockMat = new WorldMat({ color: 0x4a4358 });
+  const floorMat = new WorldMat({ color: 0x3a3348 });
   const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, 26), floorMat);
   floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
   // a rounded shell rather than a box: caves are not rooms with square corners
   const shell = new THREE.Mesh(
     new THREE.SphereGeometry(R + 0.4, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    new THREE.MeshToonMaterial({ color: 0x4a4358, side: THREE.BackSide }));
+    new WorldMat({ color: 0x4a4358, side: THREE.BackSide }));
   g.add(shell);
   const CRYSTALS = [[3.4, -2.2, 0xa48fe0], [-4.1, 1.6, 0x8fd0ff], [1.2, 4.6, 0xff9ec6],
                     [-2.4, -4.4, 0x9affd0]];
@@ -2426,12 +2858,12 @@ function furnishCave(g, R, solid) {
 
 // ---- the mountain: a hollow peak with a spiral of ledges up to the daylight ----
 function furnishMountain(g, R, solid) {
-  const stoneMat = new THREE.MeshToonMaterial({ color: 0x6f7a86 });
-  const ledgeMat = new THREE.MeshToonMaterial({ color: 0x8b9aa8 });
+  const stoneMat = new WorldMat({ color: 0x6f7a86 });
+  const ledgeMat = new WorldMat({ color: 0x8b9aa8 });
   const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, 28), stoneMat);
   floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.4, R + 0.4, 20, 28, 1, true),
-    new THREE.MeshToonMaterial({ color: 0x6f7a86, side: THREE.BackSide }));
+    new WorldMat({ color: 0x6f7a86, side: THREE.BackSide }));
   shaft.position.y = 9.5; g.add(shaft);
   // a spiral of standable ledges. This is the one interior that is a climb rather than a
   // room, which is rather the point of putting one inside a mountain.
@@ -2458,19 +2890,19 @@ function furnishMountain(g, R, solid) {
 
 // ---- the arena: a ring, a podium, four braziers ----
 function furnishArena(g, R, solid) {
-  const sandMat = new THREE.MeshToonMaterial({ color: 0xdcc38b });
-  const stoneMat = new THREE.MeshToonMaterial({ color: 0xbfae90 });
+  const sandMat = new WorldMat({ color: 0xdcc38b });
+  const stoneMat = new WorldMat({ color: 0xbfae90 });
   const floor = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.6, 30), sandMat);
   floor.position.y = -0.3; floor.receiveShadow = true; g.add(floor);
   // tiered seating, which is what makes an arena feel watched rather than empty
   for (let t = 0; t < 3; t++) {
     const rr = R + 0.5 + t * 0.9;
     const tier = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, 1.1, 30, 1, true),
-      new THREE.MeshToonMaterial({ color: t % 2 ? 0xb0a084 : 0xc8b895, side: THREE.DoubleSide }));
+      new WorldMat({ color: t % 2 ? 0xb0a084 : 0xc8b895, side: THREE.DoubleSide }));
     tier.position.y = 0.55 + t * 1.0; g.add(tier);
   }
   const ring = new THREE.Mesh(new THREE.TorusGeometry(R - 1.4, 0.12, 8, 40),
-    new THREE.MeshToonMaterial({ color: 0xd8a441 }));
+    new WorldMat({ color: 0xd8a441 }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
   const podium = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 2.0, 0.9, 20), stoneMat);
   podium.position.set(0, 0.45, 0); podium.castShadow = true; g.add(podium);
@@ -2488,7 +2920,7 @@ function furnishArena(g, R, solid) {
   for (let i = 0; i < 8; i++) {
     const a = i / 8 * Math.PI * 2;
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.6),
-      new THREE.MeshToonMaterial({ color: [0xe8574a, 0x4a8fe8, 0x6fce4e, 0xd8a441][i % 4],
+      new WorldMat({ color: [0xe8574a, 0x4a8fe8, 0x6fce4e, 0xd8a441][i % 4],
         side: THREE.DoubleSide }));
     flag.position.set(Math.cos(a) * (R + 1.2), 4.2, Math.sin(a) * (R + 1.2));
     flag.rotation.y = -a; g.add(flag);
@@ -2544,6 +2976,9 @@ function enterHouse(kind) {
   houseReturn = player.position.clone();
   insideHouse = true;
   buildInterior(k);
+  if (!progress.visits) progress.visits = {};
+  progress.visits[k] = (progress.visits[k] || 0) + 1;
+  saveProgress();
   riding = null;
   // arrive just inside the doorway, facing the room, never in the middle of the furniture
   player.position.set(HOUSE_X, 0, HOUSE_Z + spec.spawnZ);
@@ -2574,10 +3009,10 @@ function spawnDungeonChest() {
   if (dungeonChest || !dungeonGroup) return;
   const chest = new THREE.Group();
   const box = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 1.1),
-    new THREE.MeshToonMaterial({ color: 0xc9954e }));
+    new WorldMat({ color: 0xc9954e }));
   box.position.y = 0.55; chest.add(box);
   const lid = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.3, 1.2),
-    new THREE.MeshToonMaterial({ color: 0xffd98a }));
+    new WorldMat({ color: 0xffd98a }));
   lid.position.y = 1.2; chest.add(lid);
   chest.add(glowSprite(0xffd98a, 4));
   chest.position.set(0, 0, 0);
@@ -2790,11 +3225,19 @@ window.__sky = {
     effects: settings.effects,
     fpsCap: settings.fpsCap,
     fps: +fpsNow.toFixed(1),
+    // what the frame actually costs, straight from the renderer -- the number an auditor can
+    // check against a device budget instead of taking a screenshot's word for it
+    triangles: renderer.info.render.triangles, calls: renderer.info.render.calls,
+    programs: renderer.info.programs ? renderer.info.programs.length : 0,
+    textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries,
     showFps: settings.showFps,
     meterText: ($('fpsMeter') || {}).textContent,
     autoAdjust: settings.autoAdjust,
     brightness: settings.brightness, contrastLvl: settings.contrastLvl, saturation: settings.saturation,
-    canvasFilter: renderer.domElement.style.filter
+    canvasFilter: renderer.domElement.style.filter,
+    artStyle: ART_STYLE, natural: NATURAL, toneMapping: renderer.toneMapping,
+    post: postTier, composer: !!composer, gtao: !!(gtaoPass && gtaoPass.enabled && postTier >= 2), bloom: !!(bloomPass && bloomPass.enabled && postTier >= 1),
+    environment: !!scene.environment, groundMaterial: (islands[0] && islands[0].group.children[0].material.type) || ''
   }),
   // interiors: how many doors are loaded, and a way to reach one without hunting
   doors: () => doors.length,
@@ -3431,9 +3874,15 @@ function bindSetting(id, apply) {
   dial('setView', el => { settings.viewDist = +el.value; });
   dial('setFx', el => { settings.effects = +el.value; });
   dial('setFpsCap', el => { settings.fpsCap = +el.value; });
+  dial('setPost', el => { settings.post = +el.value; });
   // picture dials are not part of a preset, so moving them leaves the preset name alone
   const pic = (id, key) => bindSetting(id, el => { settings[key] = +el.value; applyPicture(); saveSettings(); syncGraphicsUI(); });
   pic('setBright', 'brightness'); pic('setCon', 'contrastLvl'); pic('setSat', 'saturation');
+  const art = $('setArt');
+  if (art) {
+    art.value = NATURAL ? 'natural' : 'storybook';
+    art.addEventListener('change', () => { settings.artStyle = art.value; saveSettings(); location.reload(); });
+  }
   const pr = $('setPicReset');
   if (pr) pr.addEventListener('click', () => { settings.brightness = settings.contrastLvl = settings.saturation = 1; applyPicture(); saveSettings(); syncGraphicsUI(); });
   const sfps = $('setShowFps');
@@ -3598,7 +4047,7 @@ function coopMakeFriend(p) {
   const g = new THREE.Group();
   const b = new THREE.Group(); g.add(b);
   let h = 0; for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const hairMat = new THREE.MeshToonMaterial({ color: COOP_HAIR[h % COOP_HAIR.length] });
+  const hairMat = new WorldMat({ color: COOP_HAIR[h % COOP_HAIR.length] });
   const hd = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 14), skin);
   hd.position.y = 1.95; hd.castShadow = true; b.add(hd);
   const hair = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 12), hairMat);
@@ -3996,6 +4445,7 @@ function useBagItem(id) {
     const pet = nearestPet(8) || pets[0];
     if (!pet) { say(L('You need a buddy nearby to give a treat to.')); chime(300); return false; }
     bagAdd('treat', -1);
+    progress.treatsGiven = (progress.treatsGiven || 0) + 1;
     pet.happy = Math.min(100, (pet.happy || 60) + 40);
     pet.careBounce = 1;
     heartBurst(pet.g.position); chime(1180);
@@ -4019,6 +4469,8 @@ function combine(recipeId) {
   if (!r || !canCombine(r)) { chime(300); return false; }
   for (const k in r.needs) bagAdd(k, -r.needs[k]);
   bagAdd(r.makes, 1);
+  if (!progress.crafted) progress.crafted = {};
+  progress.crafted[r.makes] = (progress.crafted[r.makes] || 0) + 1;
   bagSel = r.makes;
   chime(880); setTimeout(() => chime(1320), 90);
   burst(player.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xffe08a, 16);
@@ -4115,6 +4567,24 @@ window.__sky.bag = () => ({
 });
 window.__sky.bagGive = (id, n) => { if (!BAG_ITEMS[id]) return false; bagAdd(id, n); saveProgress(); renderBag(); return true; };
 window.__sky.bagPickup = kind => bagOnPickup(kind);
+// map and story probes
+window.__sky.region = (x, z) => { const r = regionAt(x, z); return { key: r.key, biome: r.biome.name, name: regionName(r) }; };
+window.__sky.continents = n => {
+  const out = [];
+  for (let cx = -n; cx <= n; cx++) for (let cz = -n; cz <= n; cz++) {
+    if (Math.abs(cx) + Math.abs(cz) > 2 && hash2(cx * 7 + 3, cz * 11 - 5) % 23 !== 0 && hash2(cx * 19 + 11, cz * 29 - 3) % 17 === 0) out.push([cx, cz]);
+  }
+  return out;
+};
+window.__sky.loadedContinents = () => islands.filter(i => i.continent).map(i => +i.r.toFixed(1));
+window.__sky.talk = () => talkSkykeeper();
+window.__sky.story = () => ({
+  quest: progress.quest.i, total: QUESTS.length, chapters: CHAPTERS.map(c => c.title),
+  dialogOn: $('dialog').classList.contains('on'), head: $('dlgHead').hidden ? '' : $('dlgHead').textContent,
+  text: $('dlgText').textContent, btn: $('dlgBtn').textContent, pagesLeft: dlgQueue.length,
+  visits: progress.visits || {}, crafted: progress.crafted || {}, regions: (progress.regions || []).length,
+  line: questLine()
+});
 {
   const b = $('coopBtn'); if (b) b.addEventListener('click', openCoop);
   const c = $('coopClose'); if (c) c.addEventListener('click', closeCoop);
@@ -4288,6 +4758,9 @@ function animate() {
     // drive the gradient dome: zenith = sky, horizon = fog, so it blends seamlessly
     skyUniforms.top.value.lerp(skyTmp.setHex(bh.sky).multiplyScalar(dim), dt * 0.8);
     skyUniforms.bottom.value.lerp(fogTmp.setHex(bh.fog).multiplyScalar(dim * 1.05), dt * 0.8);
+    // clouds drift, and take the light of the hour: white at noon, dim and warm at dusk
+    skyUniforms.time.value += dt;
+    skyUniforms.cloud.value.lerp(skyTmp.setRGB(1, 0.97, 0.94).multiplyScalar(0.45 + 0.55 * dayF), dt * 0.8);
     skyDome.position.copy(camera.position);
     // keep the sun high, offset from the camera, and fade it at night
     const sd = new THREE.Vector3(0.4, 0.8, 0.45).normalize();
@@ -4679,6 +5152,6 @@ function animate() {
     camera.lookAt(player.position.x, player.position.y + 1.6, player.position.z);
   }
 
-  renderer.render(scene, camera);
+  drawFrame();
 }
 animate();
