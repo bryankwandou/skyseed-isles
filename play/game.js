@@ -3797,13 +3797,32 @@ function pollGamepad(dt) {
 // ---------- first person / third person ----------
 // The avatar is hidden in first person rather than part-hidden: a VRM head scaled away
 // leaves a neck stump in view, and a child should see the world, not the inside of a face.
+// HUD buttons show symbols, not words: they read the same in every language and at a glance
+const HUD_ICON = (() => {
+  const s = d => '<svg class="hudIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  return {
+    jump: s('<path d="M12 20V5"/><path d="M5 12l7-7 7 7"/>'),
+    boop: s('<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="2.5"/>'),
+    build: s('<path d="M14 6l4 4"/><path d="M3 21l9-9"/><path d="M12.5 3.5l8 8-3 3-8-8z"/>'),
+    care: s('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/>'),
+    ride: s('<circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/><path d="M7 17l4-7h4l2 7M11 10l-1-3h-2"/>'),
+    off: s('<path d="M12 4v11"/><path d="M6 11l6 6 6-6"/><path d="M5 21h14"/>'),
+    lock: s('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+    eye: s('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+    cam: s('<rect x="2" y="7" width="14" height="11" rx="2"/><path d="M16 11l6-3v9l-6-3"/>')
+  };
+})();
+function setIcon(el, key) { if (el && el.dataset.icon !== key) { el.dataset.icon = key; el.innerHTML = HUD_ICON[key]; } }
+for (const [id, key] of [['jumpBtn', 'jump'], ['punchBtn', 'boop'], ['buildBtn', 'build'], ['careBtn', 'care'], ['rideBtn', 'ride']]) setIcon($(id), key);
+setIcon($('viewBtn'), settings.view === 'fpp' ? 'eye' : 'cam');
+
 function setViewMode(mode) {
   settings.view = mode === 'fpp' ? 'fpp' : 'tpp';
   saveSettings();
   player.visible = settings.view === 'tpp';
   camSnap = true;
   const btn = $('viewBtn');
-  if (btn) btn.textContent = settings.view === 'fpp' ? L('1st') : L('3rd');
+  setIcon(btn, settings.view === 'fpp' ? 'eye' : 'cam');
   say(settings.view === 'fpp' ? L('First person. Look around!') : L('Back to third person.'));
 }
 
@@ -5098,7 +5117,7 @@ function animate() {
     if (rideBtn) {
       const np = riding ? riding : nearestPet(4);
       rideBtn.style.display = np ? 'flex' : 'none';
-      if (np) rideBtn.textContent = riding ? L('HOP OFF') : (np.level >= RIDE_LEVEL ? L('RIDE') : 'Lv' + np.level + '/' + RIDE_LEVEL);
+      if (np) setIcon(rideBtn, riding ? 'off' : (np.level >= RIDE_LEVEL ? 'ride' : 'lock'));
     }
     // nudge toward the wings goal only for buddies that aren't there yet
     if (riding && !riding.wings) tip('wings', L('Keep petting {name} — at Lv 8 they grow wings and can fly!', { name: riding.name }));
