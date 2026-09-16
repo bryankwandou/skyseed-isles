@@ -345,7 +345,7 @@ export const STRINGS = {
     'Crystal': 'Kristal', 'Fence': 'Pagar', 'Bench': 'Bangku', 'Arch': 'Gerbang', 'Path': 'Jalan',
     '↻ Rotate': '↻ Putar', 'Place': 'Taruh', 'Undo': 'Batal',
     '♥ Pet': '♥ Elus', 'RIDE': 'NAIKI', 'HOP OFF': 'TURUN', 'TALK': 'BICARA',
-    'JUMP': 'LOMPAT', 'POW': 'DOR', 'Okay!': 'Oke!',
+    'JUMP': 'LOMPAT', 'BOOP': 'COLEK', 'Okay!': 'Oke!',
     '✦ THE SKYKEEPER': '✦ PENJAGA LANGIT',
     'Log in / Sign up': 'Masuk / Daftar',
     'to save across devices': 'untuk menyimpan lintas perangkat',
