@@ -264,11 +264,13 @@ function undergrowth(r, biome, rand) {
   // not mean pink bushes underneath. Kept knee-high: anything taller reads as a boulder.
   const grass = new THREE.Color(biome.grass), tuft = new THREE.Color(biome.tuft);
   const bush = grass.clone().multiplyScalar(0.72);
+  // thicker ground cover in Natural mode, toward the layered shrine garden look
+  const lush = NATURAL ? 1.7 : 1;
   const layers = [
     // geometry,                                 count,        colour,  lean, scale range
-    [new THREE.IcosahedronGeometry(0.26, 1), area * 0.09, bush, 0.12, [0.6, 1.15]],
-    [new THREE.ConeGeometry(0.13, 0.95, 4), area * 0.13, tuft.clone().lerp(bush, 0.55), 0.5, [0.55, 1.1]],
-    [new THREE.SphereGeometry(0.075, 6, 5), area * 0.05, new THREE.Color(biome.bloom || 0xffd9ec), 0.1, [0.8, 1.4]]
+    [new THREE.IcosahedronGeometry(0.26, 1), area * 0.09 * lush, bush, 0.12, [0.6, 1.15]],
+    [new THREE.ConeGeometry(0.13, 0.95, 4), area * 0.13 * lush, tuft.clone().lerp(bush, 0.55), 0.5, [0.55, 1.1]],
+    [new THREE.SphereGeometry(0.075, 6, 5), area * 0.05 * lush, new THREE.Color(biome.bloom || 0xffd9ec), 0.1, [0.8, 1.4]]
   ];
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
