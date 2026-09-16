@@ -39,7 +39,7 @@ jobs:
           if git ls-files | grep -E '^\.env$|^\.env\.local$'; then
             echo "A real .env file is committed — remove it."; exit 1
           fi
-          if grep -rElq "postgresql://[^ ]*:[^ ]*@" --include=*.js --include=*.mjs --include=*.json --include=*.md . ; then
+          if git grep -Elq "postgresql://[^ ]*:[^ ]*@" -- "*.js" "*.mjs" "*.json" "*.md" ; then
             echo "A database URL with credentials appears in tracked files."; exit 1
           fi
           echo "No secrets found in tracked files."
