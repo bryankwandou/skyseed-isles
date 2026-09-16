@@ -661,6 +661,7 @@
   }
   #title button:hover { transform:scale(1.06); }
   #title button:focus-visible { outline:3px solid #1d3a5f; outline-offset:3px; }
+  .hudIcon { width:58%; height:58%; max-width:30px; max-height:30px; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -916,12 +917,12 @@
 <div id="msg"></div>
 <div id="help" data-i18n="HELP_LINE">WASD run · Space jump · stand close to a slime to befriend it · P pet · R ride your buddy · E talk · B build (R rotates) · J journal · K wardrobe · T shop · F bop · Esc settings</div>
 <div id="stick"><div id="knob"></div></div>
-<button class="tbtn" id="jumpBtn" aria-label="Jump" data-i18n="JUMP">JUMP</button>
-<button class="tbtn" id="punchBtn" aria-label="Boop" style="right:120px; bottom:44px;" data-i18n="BOOP">BOOP</button>
-<button id="buildBtn" aria-label="Toggle build mode" data-i18n="Build">Build</button>
-<button id="careBtn" aria-label="Pet your buddy" data-i18n="♥ Pet">♥ Pet</button>
-<button id="rideBtn" aria-label="Ride your buddy">RIDE</button>
-<button id="viewBtn" aria-label="Switch between your own eyes and the camera behind you">3rd</button>
+<button class="tbtn" id="jumpBtn" aria-label="Jump" title="Jump"></button>
+<button class="tbtn" id="punchBtn" aria-label="Boop" title="Boop" style="right:120px; bottom:44px;"></button>
+<button id="buildBtn" aria-label="Toggle build mode" title="Build"></button>
+<button id="careBtn" aria-label="Pet your buddy" title="Pet"></button>
+<button id="rideBtn" aria-label="Ride your buddy" title="Ride"></button>
+<button id="viewBtn" aria-label="Switch between your own eyes and the camera behind you" title="Camera"></button>
 <button id="houseEnter" class="doorBtn" aria-label="Go inside the house" data-i18n="ENTER">ENTER</button>
 <button id="houseLeave" class="doorBtn" aria-label="Go back outside" data-i18n="GO OUT">GO OUT</button>
 <div id="palette" aria-label="Building palette">
