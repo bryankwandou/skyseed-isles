@@ -75,10 +75,26 @@ renderer.debug.onShaderError = (gl, program, vs, fs) => {
   console.error('shader failed:', log);
   let step = 0;
   try { step = +sessionStorage.getItem('skyseed_gpu_step') || 0; } catch (e) {}
-  if (step >= 2) return;
+  if (step >= 3) {
+    // out of rungs: say so on screen rather than leave a child staring at an empty sky
+    if (!document.getElementById('gpuNotice')) {
+      const n = document.createElement('div');
+      n.id = 'gpuNotice';
+      n.setAttribute('role', 'alert');
+      n.textContent = "This device's graphics chip could not draw the world. Try another browser, or update this one.";
+      n.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:99;max-width:80vw;' +
+        'padding:14px 18px;border-radius:12px;background:#fff;color:#223;font:600 16px system-ui;box-shadow:0 4px 18px #0003';
+      document.body.appendChild(n);
+    }
+    return;
+  }
   try {
     const s = JSON.parse(localStorage.getItem('skyseed_settings_v1')) || {};
-    if (NATURAL) s.artStyle = 'storybook';
+    if (step >= 2) {
+      // last rung: the lightest preset there is
+      Object.assign(s, { artStyle: 'storybook', quality: 'potato', renderScale: 0.6, shadows: 'off',
+        viewDist: 90, effects: 0.25, post: 0, autoAdjust: false });
+    } else if (NATURAL) s.artStyle = 'storybook';
     else { s.shadows = 'off'; s.post = 0; }
     localStorage.setItem('skyseed_settings_v1', JSON.stringify(s));
     sessionStorage.setItem('skyseed_gpu_step', String(step + 1));
@@ -865,7 +881,8 @@ function glowSprite(color, size) {
 function addSeed(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.32), seedMat);
   s.position.set(isl.x + ox, isl.y + 1, isl.z + oz);
-  s.add(new THREE.PointLight(0xffe98a, 0.6, 4));
+  // No PointLight here: seeds spawn on every island, and each light is compiled into every
+  // lit shader. Enough of them overflowed a tablet's uniform budget and blanked the world.
   s.add(glowSprite(0xffe08a, 1.6));
   scene.add(s);
   const c = { mesh: s, kind: 'seed', r: 1.1, worth: 1 };
@@ -892,7 +909,7 @@ petalMat.userData.shared = true;
 function addMoonpetal(isl, ox, oz) {
   const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), petalMat);
   s.position.set(isl.x + ox, isl.y + 1.3, isl.z + oz);
-  s.add(new THREE.PointLight(0xd8b8ff, 0.9, 6));
+  // glow sprite only -- see addSeed for why streamed pickups carry no PointLight
   s.add(glowSprite(0xe6c8ff, 2.2));
   scene.add(s);
   const c = { mesh: s, kind: 'petal', r: 1.2, worth: 5 };
@@ -1721,11 +1738,14 @@ function makeBuildMesh(type) {
     post.position.y = 0.55; g.add(post);
     const glow = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd98a }));
     glow.position.y = 1.15; g.add(glow);
-    glow.add(new THREE.PointLight(0xffcf7a, 0.7, 6));
+    // a child can place dozens of lanterns; the glow sprite carries the light instead of a
+    // PointLight, which would be compiled into every lit shader in the world
+    glow.add(glowSprite(0xffcf7a, 1.4));
   } else if (type === 'crystal') {
-    const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), new WorldMat({ color: 0x8fd0ff }));
+    const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0),
+      new WorldMat({ color: 0x8fd0ff, emissive: 0x3f7fb0, emissiveIntensity: 0.6 }));
     cr.position.y = 0.55; cr.castShadow = true; g.add(cr);
-    cr.add(new THREE.PointLight(0x8fd0ff, 0.5, 5));
+    cr.add(glowSprite(0x8fd0ff, 1.2));
   } else if (type === 'fence') {
     const rail = new WorldMat({ color: 0xb98a5a });
     [-0.45, 0.45].forEach(x => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.8, 0.12), rail); p.position.set(x, 0.4, 0); p.castShadow = true; g.add(p); });
@@ -2418,7 +2438,8 @@ function makeHat(id) {
     cap.position.y = 0.25; g.add(cap);
     const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }));
     st.position.y = 0.58; g.add(st);
-    st.add(new THREE.PointLight(0xfff2a0, 0.5, 3));
+    // unlit star, no PointLight: every co-op friend wearing this hat would add another light
+    // to every lit shader
   } else { // party
     const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.55, 12), new WorldMat({ color: 0xff7ab0 }));
     cone.position.y = 0.28; g.add(cone);
@@ -3330,6 +3351,9 @@ window.__sky = {
     // what the frame actually costs, straight from the renderer -- the number an auditor can
     // check against a device budget instead of taking a screenshot's word for it
     triangles: renderer.info.render.triangles, calls: renderer.info.render.calls,
+    // every visible point light is compiled into every lit shader; tablet GPUs have a
+    // small uniform budget, so this is the number that decides whether islands draw
+    pointLights: (() => { let n = 0; scene.traverseVisible(o => { if (o.isPointLight) n++; }); return n; })(),
     programs: renderer.info.programs ? renderer.info.programs.length : 0,
     textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries,
     showFps: settings.showFps,
