@@ -27,6 +27,10 @@
     user-select:none;
   }
   #hud b { font-variant-numeric:tabular-nums; }
+  /* narrow portrait: the right column (build/pet, 64px wide at right:24px) needs its lane too */
+  @media (orientation:portrait) and (max-width:600px) {
+    #hud { max-width:calc(100vw - 66px - 100px); font-size:13px; line-height:1.5; padding:8px 12px; }
+  }
   #accountBar {
     position:fixed; top:12px; right:12px; z-index:12;
     background:var(--panel); backdrop-filter:blur(8px); border-radius:12px;
