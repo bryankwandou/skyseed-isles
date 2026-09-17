@@ -1,5 +1,5 @@
 // Skyseed Isles service worker — cache the shell, never cache the API.
-const CACHE = 'skyseed-v5';
+const CACHE = 'skyseed-v6';
 const SHELL = ['./', './index.html', './game.js', './i18n.js', './account.html', './account.js',
   './family.html', './terms.html', './privacy.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png'];

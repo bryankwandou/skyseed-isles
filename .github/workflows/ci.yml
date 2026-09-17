@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'fix/**']
   pull_request:
+  workflow_dispatch:
 
 jobs:
   check:
@@ -43,3 +44,31 @@ jobs:
             echo "A database URL with credentials appears in tracked files."; exit 1
           fi
           echo "No secrets found in tracked files."
+
+  # The tablet blank-screen regression runs here, on GitHub's machine, in headless Chrome
+  # with a software GPU and a tablet-sized shader budget.
+  blank-screen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Serve the game
+        run: |
+          node node_modules/http-server/bin/http-server -p 5610 -c-1 --silent . &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:5610/play/ >/dev/null && break; sleep 1; done
+      - name: Blank-screen test
+        env:
+          TEST_URL: http://127.0.0.1:5610/play/
+          CHROME_PATH: /usr/bin/google-chrome
+          SHOT_DIR: ${{ runner.temp }}/shots/
+        run: node test/blank-screen.test.mjs
+      - name: Upload screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blank-screen-shot
+          path: ${{ runner.temp }}/shots/*.png
