@@ -64,6 +64,20 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 if (NATURAL) { renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08; }
 document.body.appendChild(renderer.domElement);
+// A tiny line naming the graphics chip, so a photo of a broken screen tells us which GPU drew it.
+{
+  const gl = renderer.getContext();
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const chip = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  const tag = document.createElement('div');
+  tag.id = 'gpuTag';
+  tag.style.cssText = 'position:fixed;left:50%;bottom:2px;transform:translateX(-50%);z-index:30;pointer-events:none;' +
+    'font:10px system-ui;color:#fff;opacity:.75;text-shadow:0 0 2px #000;white-space:nowrap;max-width:96vw;overflow:hidden';
+  const paint = () => { tag.textContent = `v7 · ${chip} · uniforms ${gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)}` +
+    ` · shader errors ${(window.__shaderErrors || []).length}`; };
+  paint(); setInterval(paint, 3000);
+  document.body.appendChild(tag);
+}
 // Some tablet GPUs refuse to compile the lit world shaders. When that happens three.js
 // skips every mesh that uses them: the sky, eyes and glows still draw, but islands, trees
 // and the player vanish. Step down one rung and reload -- first to Storybook shading,
