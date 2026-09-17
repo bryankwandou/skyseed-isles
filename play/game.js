@@ -73,7 +73,7 @@ document.body.appendChild(renderer.domElement);
   tag.id = 'gpuTag';
   tag.style.cssText = 'position:fixed;left:50%;bottom:2px;transform:translateX(-50%);z-index:30;pointer-events:none;' +
     'font:10px system-ui;color:#fff;opacity:.75;text-shadow:0 0 2px #000;white-space:nowrap;max-width:96vw;overflow:hidden';
-  const paint = () => { tag.textContent = `v7 · ${chip} · uniforms ${gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)}` +
+  const paint = () => { tag.textContent = `${chip} · uniforms ${gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)}` +
     ` · shader errors ${(window.__shaderErrors || []).length}`; };
   paint(); setInterval(paint, 3000);
   document.body.appendChild(tag);
