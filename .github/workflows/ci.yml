@@ -66,6 +66,13 @@ jobs:
           CHROME_PATH: /usr/bin/google-chrome
           SHOT_DIR: ${{ runner.temp }}/shots/
         run: node test/blank-screen.test.mjs
+      - name: HUD overlap test
+        if: always()
+        env:
+          TEST_URL: http://127.0.0.1:5610/play/
+          CHROME_PATH: /usr/bin/google-chrome
+          SHOT_DIR: ${{ runner.temp }}/shots/
+        run: node test/hud-overlap.test.mjs
       - name: Upload screenshot
         if: always()
         uses: actions/upload-artifact@v4
